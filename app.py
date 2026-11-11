@@ -4710,3 +4710,21 @@ elif active_tab == "💼 Financial Performance":
             """,
                 unsafe_allow_html=True,
             )
+# ==========================================
+
+# ==========================================
+
+# ==========================================
+# LIVE KHIS INTEGRATION PIPELINE
+# ==========================================
+from scripts.khis_adapter import get_live_cleaned_dataset
+
+PV_VISUALIZATION_UID = "IwUxQNFazpx"
+KPI_VISUALIZATION_UID = "IPjuLUsTQHG"
+
+try:
+    df_live = get_live_cleaned_dataset(PV_VISUALIZATION_UID, KPI_VISUALIZATION_UID)
+    if not df_live.empty:
+        df = df_live
+except Exception as e:
+    st.sidebar.warning("Using offline fallback data.")
