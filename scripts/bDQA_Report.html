@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Baseline Data Quality Assessment (bDQA) Executive Report</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 15mm;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #2D3748;
+            line-height: 1.5;
+            background-color: #F8FAFC;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #FFFFFF;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .header {
+            border-bottom: 3px solid #0A2540;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #0A2540;
+            margin: 0 0 5px 0;
+            font-size: 24px;
+        }
+
+        .header p {
+            color: #00A8CC;
+            margin: 0;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        /* Executive KPI Banner Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .kpi-card {
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid #CBD5E1;
+        }
+
+        .kpi-card.navy {
+            background: #F1F5F9;
+            border-color: #0A2540;
+        }
+
+        .kpi-card.red {
+            background: #FEF2F2;
+            border-color: #C62828;
+        }
+
+        .kpi-card.gold {
+            background: #FEFCE8;
+            border-color: #F4B400;
+        }
+
+        .kpi-number {
+            font-size: 26px;
+            font-weight: bold;
+            line-height: 1.1;
+        }
+
+        .kpi-number.navy {
+            color: #0A2540;
+        }
+
+        .kpi-number.red {
+            color: #C62828;
+        }
+
+        .kpi-number.gold {
+            color: #D97706;
+        }
+
+        .kpi-label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #2D3748;
+            margin-top: 5px;
+        }
+
+        .kpi-sub {
+            font-size: 11px;
+            color: #64748B;
+        }
+
+        /* Headings & Text */
+        h2 {
+            color: #0A2540;
+            font-size: 16px;
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 4px;
+            margin-top: 25px;
+        }
+
+        h3 {
+            color: #00A8CC;
+            font-size: 14px;
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
+
+        p,
+        li {
+            font-size: 13px;
+        }
+
+        ul {
+            padding-left: 20px;
+            margin-top: 5px;
+        }
+
+        li {
+            margin-bottom: 5px;
+        }
+
+        /* Chart Boxes */
+        .chart-box {
+            text-align: center;
+            margin: 15px 0;
+            background: #FFFFFF;
+            padding: 10px;
+            border: 1px solid #E2E8F0;
+            border-radius: 6px;
+        }
+
+        .chart-box img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        .caption {
+            font-size: 11px;
+            color: #64748B;
+            font-style: italic;
+            margin-top: 5px;
+        }
+
+        /* Plain English Narrative Callout Box */
+        .narrative-box {
+            background: #F8FAFC;
+            border-left: 4px solid #00A8CC;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .narrative-box strong {
+            color: #0A2540;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            font-size: 12px;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #CBD5E1;
+        }
+
+        th {
+            background-color: #0A2540;
+            color: #FFFFFF;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background-color: #F8FAFC;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- Header -->
+        <div class="header">
+            <h1>Baseline Data Quality Assessment (bDQA) Executive Report</h1>
+            <p>Cohort 3 Health Facilities (13 Facilities) | Baseline Period: Q4 2025</p>
+        </div>
+
+        <!-- Executive KPI Banner -->
+        <div class="kpi-grid">
+            <div class="kpi-card navy">
+                <div class="kpi-number navy">13</div>
+                <div class="kpi-label">Facilities Assessed</div>
+                <div class="kpi-sub">100% Cohort 3 Coverage</div>
+            </div>
+            <div class="kpi-card navy">
+                <div class="kpi-number navy">74.1%</div>
+                <div class="kpi-label">Source Tally Match</div>
+                <div class="kpi-sub">Register → Summary</div>
+            </div>
+            <div class="kpi-card red">
+                <div class="kpi-number red">43.8%</div>
+                <div class="kpi-label">KHIS Concordance</div>
+                <div class="kpi-sub">Summary → Online DHIS2</div>
+            </div>
+            <div class="kpi-card gold">
+                <div class="kpi-number gold">+334%</div>
+                <div class="kpi-label">OPD Inflation</div>
+                <div class="kpi-sub">Paper Register vs Online</div>
+            </div>
+        </div>
+
+        <!-- Section 1 -->
+        <h2>1. Purpose & Strategic Importance (Why We Conduct DQAs)</h2>
+        <p>A Data Quality Assessment (DQA) is like a regular check-up for a hospital's records system. Reliable data is
+            essential for saving lives—it ensures clinics order enough medicines, staff their delivery rooms correctly,
+            and track patient health accurately. When numbers are recorded incorrectly, health managers make decisions
+            based on false information, risking patient care and wasting financial resources. This assessment checks
+            data accuracy across 13 Cohort 3 facilities to fix gaps before final evaluation.</p>
+        <ul>
+            <li><strong>Verify Data Across 3 Levels:</strong> Cross-check counts between physical clinic registers,
+                monthly facility summaries, and the national electronic database (KHIS/DHIS2).</li>
+            <li><strong>Spot Medical Record Logics:</strong> Check if clinical numbers make sense in real life (e.g.,
+                verifying if every recorded live birth has a matching baby logged for immediate breastfeeding).</li>
+            <li><strong>Uncover Field Bottlenecks:</strong> Identify why errors happen (e.g., missing official
+                government books, lack of staff training, or missing supervisor reviews).</li>
+            <li><strong>Guide Mentorship & Support:</strong> Give LifeNet and county leadership a clear action plan to
+                train facility staff and fix documentation issues.</li>
+        </ul>
+
+        <!-- Section 2 -->
+        <h2>2. Assessment Methodology (How the Audit Works)</h2>
+        <p>Our M&E team audited patient records across 13 facilities for October, November, and December 2025 by
+            comparing three reporting levels:</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Reporting Level</th>
+                    <th>Data Source Evaluated</th>
+                    <th>What It Means in Plain English</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Tier 1: Primary Register</strong></td>
+                    <td>Paper Registers at point of care (OPD, ANC, Delivery)</td>
+                    <td>The original paper book where nurses write patient visits during care.</td>
+                </tr>
+                <tr>
+                    <td><strong>Tier 2: Summary Sheet</strong></td>
+                    <td>Monthly MOH Summary Sheets (MOH 705, 711)</td>
+                    <td>The monthly paper sheet where staff add up total visits at month-end.</td>
+                </tr>
+                <tr>
+                    <td><strong>Tier 3: KHIS Database</strong></td>
+                    <td>Kenya Health Information System (DHIS2)</td>
+                    <td>The government online system where monthly totals are typed in.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Section 3 -->
+        <h2>3. Assessment Findings & Graphical Narratives</h2>
+
+        <!-- Figure 1 -->
+        <h3>Figure 1: Comparison of Recorded Totals Across the 3 Reporting Levels</h3>
+        <div class="chart-box">
+            <img src="01_bDQA_Cohort3_Baseline_Platform_Reconciliation.png"
+                alt="Figure 1: Platform Reconciliation Chart">
+            <div class="caption">Figure 1: Tri-Platform Baseline Data Volume Reconciliation Across Key Health Indicators
+                (Log Scale).</div>
+        </div>
+        <div class="narrative-box">
+            <strong>What Figure 1 Shows (Plain English Narrative):</strong><br>
+            This chart shows how patient numbers grow bigger as they move from paper registers to the online
+            database.<br>
+            <ul>
+                <li><strong>Outpatient (OPD) Over-Reporting:</strong> Paper registers log <strong>4,508 visits</strong>,
+                    but monthly summary sheets log <strong>13,755</strong>, and the online system jumps to
+                    <strong>19,563 visits</strong> (a massive <strong>+334% inflation</strong>). This happens because
+                    staff count casual triage notes and unstandardized scraps of paper into monthly totals rather than
+                    using standard registers.</li>
+                <li><strong>Maternal Health Discrepancies:</strong> First ANC visits increase from 270 on paper to 448
+                    online (<strong>+65.9% higher</strong>). Inpatient admissions rise from 459 on paper to 1,047 online
+                    (<strong>+128.1% higher</strong>).</li>
+                <li><strong>Key Takeaway:</strong> The online system significantly over-reports patient volume, making
+                    clinics appear busier than their physical registers actually show.</li>
+            </ul>
+        </div>
+
+        <!-- Figure 2 -->
+        <h3>Figure 2: Data Accuracy Tally Rates Across 13 Health Facilities</h3>
+        <div class="chart-box">
+            <img src="02_bDQA_Cohort3_Baseline_Facility_Accuracy.png" alt="Figure 2: Facility Accuracy Chart">
+            <div class="caption">Figure 2: Data Alignment Tally Rates Across 13 Cohort 3 Facilities.</div>
+        </div>
+        <div class="narrative-box">
+            <strong>What Figure 2 Shows (Plain English Narrative):</strong><br>
+            This chart ranks all 13 facilities based on how accurately their paper numbers match what gets reported
+            online.<br>
+            <ul>
+                <li><strong>Best Performers (Top Tiers):</strong> <em>Friends Kaptama</em> (<strong>60.3%
+                        match</strong>) and <em>Mundoli HF</em> (<strong>49.2% match</strong>) lead the group because
+                    they have dedicated clerks doing careful monthly math.</li>
+                <li><strong>Good Math, Poor Uploads:</strong> Facilities like <em>Eregi</em>, <em>Mission of Mercy</em>,
+                    and <em>Namasoli</em> do a great job counting paper registers (<strong>82.5% accuracy</strong>), but
+                    their online accuracy drops to <strong>42.9% – 46.0%</strong>. This means errors are happening when
+                    numbers are typed into the online computer system at the sub-county level.</li>
+                <li><strong>High-Risk Facilities:</strong> <em>S.A. Kolanya</em>, <em>Ingotse HF</em>, and
+                    <em>Musoli</em> scored lowest (below <strong>28% overall match</strong>) due to missing summary
+                    sheets and lack of record oversight.</li>
+            </ul>
+        </div>
+
+        <!-- Figure 3 -->
+        <h3>Figure 3: Maternity & Newborn Care Cascade (Deliveries → Live Births → Early Breastfeeding)</h3>
+        <div class="chart-box">
+            <img src="04_bDQA_Cohort3_Baseline_Clinical_Cascade.png" alt="Figure 3: Clinical Cascade Chart">
+            <div class="caption">Figure 3: Delivery Room & Essential Newborn Care Clinical Cascade Across Platforms.
+            </div>
+        </div>
+        <div class="narrative-box">
+            <strong>What Figure 3 Shows (Plain English Narrative):</strong><br>
+            This chart tracks mother and baby care in the delivery room to see if clinical numbers make logical
+            sense.<br>
+            <ul>
+                <li><strong>Deliveries vs. Birth Outcomes:</strong> On physical paper, 507 deliveries match perfectly
+                    with outcomes (504 live births + 2 fresh stillbirths + 2 macerated stillbirths). But in the online
+                    system, deliveries jump to 747 and live births to 725—creating nearly 240 imaginary deliveries.</li>
+                <li><strong>Breastfeeding Documentation Gap:</strong> Out of 504 live babies born on paper, only 368 are
+                    recorded as put to the breast within 1 hour. That is a <strong>27% gap in care
+                        documentation</strong>. Conversely, the online system reports 642 babies breastfed, which
+                    physically exceeds the real number of live births born. Staff are guessing numbers instead of
+                    cross-checking birth registers.</li>
+            </ul>
+        </div>
+
+        <!-- Section 4 -->
+        <h2>4. Real-World Field Challenges (Why These Gaps Happen)</h2>
+        <p>Our field visits and audits revealed six simple, practical reasons driving these reporting errors:</p>
+        <ul>
+            <li><strong>Improvised Exercise Books:</strong> Clinics ran out of official MOH government register books,
+                so nurses recorded patient visits in plain school exercise books missing standard columns.</li>
+            <li><strong>No Monthly Data Meetings:</strong> Clinic teams do not meet at month-end to check their math
+                before sending numbers to the sub-county.</li>
+            <li><strong>Lack of Field Supervision:</strong> Sub-county supervisors and partners rarely visit to mentor
+                staff on proper documentation.</li>
+            <li><strong>Missing Written Guidelines (SOPs):</strong> Staff have no simple step-by-step posters or written
+                guidelines showing how to tally books.</li>
+            <li><strong>Delegating Entry to Casual Interns:</strong> Sub-county data officers delegate online typing to
+                untrained interns who accidentally type numbers wrong.</li>
+            <li><strong>Missing Monthly Files in KHIS:</strong> Entire monthly reporting sheets were left un-entered in
+                the government online database.</li>
+        </ul>
+
+        <!-- Section 5 -->
+        <h2>5. Strategic Recommendations & Action Plan Matrix</h2>
+        <p>To solve these challenges before the final evaluation, LifeNet and health leaders will execute this clear
+            action plan:</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Identified Challenge</th>
+                    <th>Actionable Solution (What We Will Do)</th>
+                    <th>Who is Responsible</th>
+                    <th>Target Success Metric</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Improvised Registers</strong></td>
+                    <td>Provide official, standardized MOH primary registers (MOH 204A, 333, 405) to all 13 clinics.
+                    </td>
+                    <td>LifeNet & Sub-County Team</td>
+                    <td>100% official MOH register usage</td>
+                </tr>
+                <tr>
+                    <td><strong>No Monthly Data Reviews</strong></td>
+                    <td>Start mandatory monthly pre-reporting Data Review Meetings (DRMs) at every facility.</td>
+                    <td>Facility In-Charges & LifeNet M&E</td>
+                    <td>Signed DRM review form every month</td>
+                </tr>
+                <tr>
+                    <td><strong>Typing & Entry Errors</strong></td>
+                    <td>Train sub-county entry clerks and interns on double-checking numbers before typing into KHIS.
+                    </td>
+                    <td>Sub-County HRIO & LifeNet</td>
+                    <td>&lt;5% difference between paper & online</td>
+                </tr>
+                <tr>
+                    <td><strong>Missing Guidelines (SOPs)</strong></td>
+                    <td>Print and hang simple step-by-step Data Management posters (SOPs) in all clinic record rooms.
+                    </td>
+                    <td>LifeNet M&E Team</td>
+                    <td>SOP posters displayed in all 13 clinics</td>
+                </tr>
+                <tr>
+                    <td><strong>Low Field Supervision</strong></td>
+                    <td>Conduct joint bi-monthly mentoring visits by LifeNet trainers and county health officers.</td>
+                    <td>Joint LifeNet & SCHMT Team</td>
+                    <td>100% of clinics visited every quarter</td>
+                </tr>
+                <tr>
+                    <td><strong>Missing KHIS Datasets</strong></td>
+                    <td>Implement monthly submission tracking logs to ensure zero missing facility reports in KHIS.</td>
+                    <td>Sub-County HRIO & LifeNet</td>
+                    <td>100% complete KHIS uploads</td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+
+</body>
+
+</html>

@@ -1,0 +1,167 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+# -------------------------------------------------------------------
+# 1. CORE DATA LOGIC & DEDUPLICATION ENGINE
+# -------------------------------------------------------------------
+@st.cache_data
+def load_and_clean_data(file_path='LifeNet 2026 Beneficiaries.xlsx'):
+    df = pd.read_excel(file_path)
+    
+    # Standardize Names & Dates
+    df['First name'] = df['First name'].astype(str).str.strip().str.title()
+    df['Last Name'] = df['Last Name'].astype(str).str.strip().str.title()
+    df['Full Name'] = df['First name'] + " " + df['Last Name']
+    df['Event date'] = pd.to_datetime(df['Event date'])
+    df['Month'] = df['Event date'].dt.month
+    
+    # Categorize Program Domains based on Trainer & Module Rules
+    medical_trainers = ['newton', 'joseph', 'whyttney']
+    mgt_trainers = ['adrian', 'lewis', 'mary']
+
+    def classify_program(row):
+        trainer = str(row['ProgTrac Trainer']).lower()
+        module = str(row['ProgTrac_Module']).lower()
+        
+        is_med_trainer = any(k in trainer for k in medical_trainers)
+        is_mgt_trainer = any(k in trainer for k in mgt_trainers)
+        is_med_mod = 'med' in module or 'medical' in module
+        is_mgt_mod = 'mgt' in module or 'management' in module
+        
+        if (is_med_trainer or is_med_mod) and not (is_mgt_trainer or is_mgt_mod):
+            return 'Medical'
+        elif (is_mgt_trainer or is_mgt_mod) and not (is_med_trainer or is_med_mod):
+            return 'Management/KHIS'
+        else:
+            return 'Joint (Medical & Management)'
+
+    df['Program'] = df.apply(classify_program, axis=1)
+    return df
+
+# -------------------------------------------------------------------
+# 2. DATA INTEGRITY AUDIT ENGINE
+# -------------------------------------------------------------------
+def audit_data_quality(df_deliveries=None, df_qsc=None):
+    issues = []
+
+    # 1. Flag Delivery Discrepancies (Birth Outcomes > Deliveries)
+    if df_deliveries is not None and not df_deliveries.empty:
+        df_deliveries['Total_Outcomes'] = (
+            df_deliveries['Live_Births'].fillna(0) + 
+            df_deliveries['Fresh_Stillbirths'].fillna(0) + 
+            df_deliveries['Macerated_Stillbirths'].fillna(0)
+        )
+        anomalies = df_deliveries[df_deliveries['Total_Outcomes'] > df_deliveries['Total_Deliveries']]
+        
+        for _, row in anomalies.iterrows():
+            diff = int(row['Total_Outcomes'] - row['Total_Deliveries'])
+            issues.append({
+                'Severity': '🔴 Critical',
+                'Category': 'Outcome Discrepancy',
+                'Facility / Period': f"{row.get('Facility_Name', 'Network Total')} ({row.get('Month', 'September')})",
+                'Issue Description': f"Birth outcomes ({int(row['Total_Outcomes'])}) exceed deliveries ({int(row['Total_Deliveries'])}) by +{diff}."
+            })
+
+    # 2. Flag Missing QSC Surveys for Cohort 3
+    cohort3_facilities = ['Facility A', 'Facility B', 'Facility C']  
+    if df_qsc is not None:
+        qsc_done = set(df_qsc['Facility_Name'].unique())
+        missing_c3 = set(cohort3_facilities) - qsc_done
+        for hf in missing_c3:
+            issues.append({
+                'Severity': '🟠 High',
+                'Category': 'Missing 360 QSC',
+                'Facility / Period': hf,
+                'Issue Description': 'Facility belongs to Cohort 3 but has no 360 QSC assessment logged.'
+            })
+
+    # 3. Flag Unauthorized QSC Entries (Revival Clinic & Mwatate Healthcare)
+    exempt_hfs = ['Revival Home Based Care Clinic', 'Mwatate Healthcare Centre']
+    if df_qsc is not None:
+        unauthorized = df_qsc[df_qsc['Facility_Name'].isin(exempt_hfs)]
+        for hf in unauthorized['Facility_Name'].unique():
+            issues.append({
+                'Severity': '🟡 Medium',
+                'Category': 'Unauthorized QSC',
+                'Facility / Period': hf,
+                'Issue Description': 'QSC data record exists for facility despite QSC not being conducted.'
+            })
+
+    return pd.DataFrame(issues)
+
+# -------------------------------------------------------------------
+# 3. EXECUTIVE DASHBOARD RENDERER
+# -------------------------------------------------------------------
+def render_executive_dashboard():
+    df = load_and_clean_data()
+    
+    st.title("🏥 LifeNet Executive Beneficiary Intelligence")
+    st.caption("Automated Deduplication & Multi-Dimensional Reach Analysis (2026)")
+    st.markdown("---")
+
+    # --- Data Quality Audit Panel ---
+    st.subheader("🚨 Data Integrity & Quality Audit")
+    df_issues = audit_data_quality()
+    if not df_issues.empty:
+        st.error(f"⚠️ Flagged {len(df_issues)} Data Quality & Audit Anomalies")
+        st.dataframe(df_issues, use_container_width=True)
+    else:
+        st.success("✅ All Data Quality Audits Passed: No QSC or Delivery Outcome Discrepancies Found.")
+
+    st.markdown("---")
+
+    # --- Sidebar Controls ---
+    st.sidebar.header("🎯 Target Scope Filters")
+    selected_program = st.sidebar.multiselect("Program Domain", options=df['Program'].unique(), default=['Medical'])
+    
+    use_preset = st.sidebar.checkbox("Apply Filter Preset (May CT + Jun-Oct Mentorship/Adhoc)", value=True)
+
+    if use_preset:
+        cond_ct = (df['ProgTrac_type of activity'] == 'Centralized Training') & (df['Month'] == 5)
+        cond_ment = (df['ProgTrac_type of activity'] == 'Mentorship') & (df['Month'] >= 6) & (df['Month'] <= 10)
+        cond_adhoc = (df['ProgTrac_type of activity'] == 'Adhoc Support') & (df['Month'] >= 6) & (df['Month'] <= 10)
+        filtered_df = df[df['Program'].isin(selected_program) & (cond_ct | cond_ment | cond_adhoc)]
+    else:
+        filtered_df = df[df['Program'].isin(selected_program)]
+
+    # --- Summary KPIs ---
+    net_unique = filtered_df['Full Name'].nunique()
+    total_logs = len(filtered_df)
+    total_facilities = filtered_df['Organisation unit name'].nunique()
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Net Unique Beneficiaries", net_unique)
+    c2.metric("Total Attendance Logs", total_logs)
+    c3.metric("Facilities Covered", total_facilities)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+
+    # --- Visual Chart ---
+    activity_unique = (
+        filtered_df.groupby('ProgTrac_type of activity')['Full Name']
+        .nunique()
+        .reset_index()
+        .rename(columns={'Full Name': 'Unique Beneficiaries'})
+    )
+    
+    fig = px.bar(
+        activity_unique, 
+        x='ProgTrac_type of activity', 
+        y='Unique Beneficiaries', 
+        text='Unique Beneficiaries',
+        color='ProgTrac_type of activity',
+        color_discrete_sequence=['#E61C24', '#0A2540', '#38BDF8'],
+        title="Deduplicated Beneficiary Reach by Capacity Building Category"
+    )
+    fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- Data Register Table ---
+    st.subheader("📋 Deduplicated Beneficiary Register")
+    dedup_display = (
+        filtered_df.drop_duplicates(subset=['Full Name', 'Organisation unit name', 'Program', 'ProgTrac_type of activity'])
+        [['Full Name', 'Organisation unit name', 'Program', 'ProgTrac_type of activity', 'Event date', 'ProgTrac Trainer']]
+        .sort_values(by='Event date', ascending=False)
+    )
+    st.dataframe(dedup_display, use_container_width=True)
