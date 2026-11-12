@@ -427,6 +427,8 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
 
     ax2 = ax1.twinx()
     ax2.plot(x, trend["Total_Deliveries"], color=LN_TEAL, marker="o", linewidth=2.2, markersize=5.5, label="Total Deliveries")
+    for xi, val in zip(x, trend["Total_Deliveries"]):
+        ax2.annotate(f"{int(val):,}", (xi, val), xytext=(0, 6), textcoords="offset points", ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=LN_TEAL)
     ax2.set_ylabel("Deliveries", color=LN_TEAL, fontsize=8.5, fontweight="bold")
     ax2.tick_params(axis="y", labelsize=8, labelcolor=LN_TEAL)
     ax2.spines["top"].set_visible(False)
@@ -468,8 +470,15 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
 
     fig, ax = plt.subplots(figsize=(7.2, 2.5), dpi=220)
     w = 0.36
-    ax.bar(x - w / 2, trend["Revenue_KES"] / 1e6, width=w, color=LN_EMERALD, label="Total Revenue (M KES)")
-    ax.bar(x + w / 2, trend["Expenses_KES"] / 1e6, width=w, color=LN_AMBER, label="Total Expenses (M KES)")
+    bars_rev = ax.bar(x - w / 2, trend["Revenue_KES"] / 1e6, width=w, color=LN_EMERALD, label="Total Revenue (M KES)")
+    bars_exp = ax.bar(x + w / 2, trend["Expenses_KES"] / 1e6, width=w, color=LN_AMBER, label="Total Expenses (M KES)")
+    for b in bars_rev:
+        h = b.get_height()
+        ax.annotate(f"{h:.1f}M", (b.get_x() + b.get_width()/2, h), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color=LN_EMERALD)
+    for b in bars_exp:
+        h = b.get_height()
+        ax.annotate(f"{h:.1f}M", (b.get_x() + b.get_width()/2, h), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color=LN_AMBER)
+    ax.set_ylim(0, max(trend["Revenue_KES"].max(), trend["Expenses_KES"].max()) / 1e6 * 1.18)
     ax.set_xticks(x)
     ax.set_xticklabels(trend["Short_Period"], fontsize=8.5, fontweight="bold", color=LN_SLATE)
     ax.set_ylabel("KES (Millions)", fontsize=8.5, fontweight="bold", color=LN_NAVY)
@@ -488,7 +497,11 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
     charts["finance_trend"] = buf3
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(7.2, 2.35), dpi=220)
-    ax_l.bar(x, trend["PPH_Cases"], width=0.48, color=LN_AMBER, label="PPH Cases")
+    bars_pph = ax_l.bar(x, trend["PPH_Cases"], width=0.48, color=LN_AMBER, label="PPH Cases")
+    for b in bars_pph:
+        h = b.get_height()
+        ax_l.annotate(f"{int(h)}", (b.get_x() + b.get_width()/2, h), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color=LN_AMBER)
+    ax_l.set_ylim(0, max(trend["PPH_Cases"].max(), 1) * 1.28)
     ax_l.set_xticks(x)
     ax_l.set_xticklabels(trend["Short_Period"], fontsize=7.5, fontweight="bold", color=LN_SLATE)
     ax_l.set_ylabel("PPH Cases", fontsize=7.8, fontweight="bold", color=LN_AMBER)
@@ -496,13 +509,19 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
     ax_l.spines["top"].set_visible(False)
     ax_l2 = ax_l.twinx()
     ax_l2.plot(x, trend["PPH_Success_Pct"], color=LN_EMERALD, marker="o", linewidth=2, markersize=4.5, label="Survival %")
-    ax_l2.set_ylim(0, 112)
+    for xi, pct in zip(x, trend["PPH_Success_Pct"]):
+        ax_l2.annotate(f"{pct:.0f}%", (xi, pct), xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", fontsize=6.5, fontweight="bold", color=LN_EMERALD)
+    ax_l2.set_ylim(0, 118)
     ax_l2.set_ylabel("Survival %", fontsize=7.8, fontweight="bold", color=LN_EMERALD)
     ax_l2.tick_params(axis="y", labelsize=7.5)
     ax_l2.spines["top"].set_visible(False)
     ax_l.set_title("PPH Cases & Survival %", fontsize=8.8, fontweight="bold", color=LN_NAVY, loc="left")
 
-    ax_r.bar(x, trend["Low_APGAR"], width=0.48, color=LN_NAVY, label="Low APGAR")
+    bars_apg = ax_r.bar(x, trend["Low_APGAR"], width=0.48, color=LN_NAVY, label="Low APGAR")
+    for b in bars_apg:
+        h = b.get_height()
+        ax_r.annotate(f"{int(h)}", (b.get_x() + b.get_width()/2, h), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.8, fontweight="bold", color=LN_NAVY)
+    ax_r.set_ylim(0, max(trend["Low_APGAR"].max(), 1) * 1.28)
     ax_r.set_xticks(x)
     ax_r.set_xticklabels(trend["Short_Period"], fontsize=7.5, fontweight="bold", color=LN_SLATE)
     ax_r.set_ylabel("Low APGAR Births", fontsize=7.8, fontweight="bold", color=LN_NAVY)
@@ -510,7 +529,9 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
     ax_r.spines["top"].set_visible(False)
     ax_r2 = ax_r.twinx()
     ax_r2.plot(x, trend["APGAR_Success_Pct"], color=LN_TEAL, marker="o", linewidth=2, markersize=4.5, label="Resusc. %")
-    ax_r2.set_ylim(0, 112)
+    for xi, pct in zip(x, trend["APGAR_Success_Pct"]):
+        ax_r2.annotate(f"{pct:.0f}%", (xi, pct), xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", fontsize=6.5, fontweight="bold", color=LN_TEAL)
+    ax_r2.set_ylim(0, 118)
     ax_r2.set_ylabel("Resusc. Success %", fontsize=7.8, fontweight="bold", color=LN_TEAL)
     ax_r2.tick_params(axis="y", labelsize=7.5)
     ax_r2.spines["top"].set_visible(False)

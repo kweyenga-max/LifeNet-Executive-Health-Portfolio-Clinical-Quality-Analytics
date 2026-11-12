@@ -4796,11 +4796,11 @@ elif active_tab == "📑 Monthly DDIU Brief":
     with ch1:
         fig_ddiu_pv = make_subplots(specs=[[{"secondary_y": True}]])
         fig_ddiu_pv.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["Total_PV"], name="Patient Visits", marker_color="#0A2540"),
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Total_PV"], name="Patient Visits", marker_color="#0A2540", text=trend_df["Total_PV"].map(lambda v: f"{int(v):,}"), textposition="inside"),
             secondary_y=False,
         )
         fig_ddiu_pv.add_trace(
-            go.Scatter(x=trend_df["Short_Period"], y=trend_df["Total_Deliveries"], name="Deliveries", mode="lines+markers", line=dict(color="#00A8CC", width=3)),
+            go.Scatter(x=trend_df["Short_Period"], y=trend_df["Total_Deliveries"], name="Deliveries", mode="lines+markers+text", text=trend_df["Total_Deliveries"].map(lambda v: f"{int(v):,}"), textposition="top center", line=dict(color="#00A8CC", width=3)),
             secondary_y=True,
         )
         fig_ddiu_pv.update_layout(
@@ -4814,10 +4814,10 @@ elif active_tab == "📑 Monthly DDIU Brief":
     with ch2:
         fig_ddiu_fin = go.Figure()
         fig_ddiu_fin.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["Revenue_KES"], name="Revenue (KES)", marker_color="#0D9488")
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Revenue_KES"], name="Revenue (KES)", marker_color="#0D9488", text=trend_df["Revenue_KES"].map(lambda v: f"{v/1e6:.1f}M"), textposition="outside")
         )
         fig_ddiu_fin.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["Expenses_KES"], name="Expenses (KES)", marker_color="#D97706")
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Expenses_KES"], name="Expenses (KES)", marker_color="#D97706", text=trend_df["Expenses_KES"].map(lambda v: f"{v/1e6:.1f}M"), textposition="outside")
         )
         fig_ddiu_fin.update_layout(
             title="MoniTrac Network Revenue vs. Operating Expenses",
@@ -4833,11 +4833,11 @@ elif active_tab == "📑 Monthly DDIU Brief":
     with em1:
         fig_ddiu_pph = make_subplots(specs=[[{"secondary_y": True}]])
         fig_ddiu_pph.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["PPH_Cases"], name="PPH Cases Managed", marker_color="#D97706"),
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["PPH_Cases"], name="PPH Cases Managed", marker_color="#D97706", text=trend_df["PPH_Cases"], textposition="inside"),
             secondary_y=False,
         )
         fig_ddiu_pph.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["PPH_Deaths"], name="PPH Deaths", marker_color="#DC2626"),
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["PPH_Deaths"], name="PPH Deaths", marker_color="#DC2626", text=trend_df["PPH_Deaths"], textposition="outside"),
             secondary_y=False,
         )
         fig_ddiu_pph.add_trace(
@@ -4845,7 +4845,9 @@ elif active_tab == "📑 Monthly DDIU Brief":
                 x=trend_df["Short_Period"],
                 y=trend_df["PPH_Success_Pct"],
                 name="PPH Survival %",
-                mode="lines+markers",
+                mode="lines+markers+text",
+                text=trend_df["PPH_Success_Pct"].map(lambda v: f"{v:.0f}%"),
+                textposition="top center",
                 line=dict(color="#0D9488", width=3),
             ),
             secondary_y=True,
@@ -4864,11 +4866,11 @@ elif active_tab == "📑 Monthly DDIU Brief":
     with em2:
         fig_ddiu_apgar = make_subplots(specs=[[{"secondary_y": True}]])
         fig_ddiu_apgar.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["Low_APGAR"], name="Low APGAR Births", marker_color="#0A2540"),
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Low_APGAR"], name="Low APGAR Births", marker_color="#0A2540", text=trend_df["Low_APGAR"], textposition="inside"),
             secondary_y=False,
         )
         fig_ddiu_apgar.add_trace(
-            go.Bar(x=trend_df["Short_Period"], y=trend_df["Maternal_Deaths"], name="Maternal Deaths", marker_color="#DC2626"),
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Maternal_Deaths"], name="Maternal Deaths", marker_color="#DC2626", text=trend_df["Maternal_Deaths"], textposition="outside"),
             secondary_y=False,
         )
         fig_ddiu_apgar.add_trace(
@@ -4876,7 +4878,9 @@ elif active_tab == "📑 Monthly DDIU Brief":
                 x=trend_df["Short_Period"],
                 y=trend_df["APGAR_Success_Pct"],
                 name="Resuscitation Success %",
-                mode="lines+markers",
+                mode="lines+markers+text",
+                text=trend_df["APGAR_Success_Pct"].map(lambda v: f"{v:.0f}%"),
+                textposition="top center",
                 line=dict(color="#00A8CC", width=3),
             ),
             secondary_y=True,
