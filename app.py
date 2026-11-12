@@ -12,6 +12,7 @@ import os
 # Backend Analytics Script Imports
 from scripts import cohort3_analytics as c3
 from scripts import finance_analytics as fa
+from scripts import ddiu_report_generator as ddiu
 
 # 1. Page Configuration - Executive Full-Screen Theme
 st.set_page_config(
@@ -1300,6 +1301,7 @@ tabs = [
     "🚨 Data Quality Audits",
     "🔍 Facility Inspector",
     "💼 Financial Performance",
+    "📑 Monthly DDIU Brief",
 ]
 active_tab = st.radio("Nav", options=tabs, horizontal=True)
 st.markdown("---")
@@ -4728,4 +4730,122 @@ elif active_tab == "💼 Financial Performance":
                 </div>
             """,
                 unsafe_allow_html=True,
+            )
+
+
+# ---------------------------------------------------------
+# TAB 7: MONTHLY DDIU & M&E EXECUTIVE BRIEF
+# ---------------------------------------------------------
+elif active_tab == "📑 Monthly DDIU Brief":
+    st.markdown("### 📑 Monthly Data Demand & Information Use (DDIU) Executive Brief")
+    st.caption("Synthesizing KHIS Patient Visits, MOH 711 Maternal/Newborn KPIs, DQA Audits & MoniTrac Financials across 38 Active Facilities.")
+
+    avail_periods = ddiu.get_available_reporting_periods()
+    default_p = ddiu.default_ddiu_period()
+    default_idx = avail_periods.index(default_p) if default_p in avail_periods else len(avail_periods) - 1
+
+    c_p1, c_p2 = st.columns([1.4, 1.0])
+    with c_p1:
+        ddiu_period = st.selectbox(
+            "Select Reporting Month (15th-of-Month Cycle):",
+            options=avail_periods,
+            index=default_idx,
+            key="ddiu_period_select",
+        )
+    ddiu_data = ddiu.build_ddiu_dataset(ddiu_period)
+    pdf_bytes = ddiu.generate_ddiu_pdf_bytes(ddiu_period)
+
+    with c_p2:
+        st.markdown("<div style='height: 26px;'></div>", unsafe_allow_html=True)
+        st.download_button(
+            label=f"📥 Download LifeNet DDIU PDF ({ddiu_period})",
+            data=pdf_bytes,
+            file_name=f"LifeNet_DDIU_Report_{ddiu_period.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+    st.markdown("---")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(
+        "Total Patient Visits",
+        f"{int(ddiu_data['tot_pv']):,}",
+        f"{ddiu_data['pv_mom_pct']:+.1f}% MoM | {ddiu_data['pv_yoy_pct']:+.1f}% YoY",
+    )
+    m2.metric(
+        "Maternity Deliveries",
+        f"{ddiu_data['tot_del']:,}",
+        f"{ddiu_data['tot_lb']:,} Live Births | {ddiu_data['tot_fsb'] + ddiu_data['tot_msb']} SB",
+    )
+    m3.metric(
+        "Reporting Completeness",
+        f"KHIS {ddiu_data['khis_reporting']}/{ddiu_data['total_facilities']}",
+        f"Finance {ddiu_data['fin_reporting']}/{ddiu_data['total_facilities']} HFs",
+    )
+    m4.metric(
+        "Network Cost Coverage",
+        f"{ddiu_data['cost_coverage']:.1f}%",
+        f"Net KES {ddiu_data['tot_net']:,.0f}",
+    )
+
+    st.markdown("---")
+
+    ch1, ch2 = st.columns(2)
+    trend_df = ddiu_data["trend_df"]
+    with ch1:
+        fig_ddiu_pv = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_ddiu_pv.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Total_PV"], name="Patient Visits", marker_color="#0A2540"),
+            secondary_y=False,
+        )
+        fig_ddiu_pv.add_trace(
+            go.Scatter(x=trend_df["Short_Period"], y=trend_df["Total_Deliveries"], name="Deliveries", mode="lines+markers", line=dict(color="#00A8CC", width=3)),
+            secondary_y=True,
+        )
+        fig_ddiu_pv.update_layout(
+            title=f"Patient Visits & Deliveries Trajectory (Through {ddiu_period})",
+            height=340,
+            margin=dict(l=20, r=20, t=50, b=20),
+            legend=dict(orientation="h", y=1.12),
+        )
+        st.plotly_chart(fig_ddiu_pv, use_container_width=True)
+
+    with ch2:
+        fig_ddiu_fin = go.Figure()
+        fig_ddiu_fin.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Revenue_KES"], name="Revenue (KES)", marker_color="#0D9488")
+        )
+        fig_ddiu_fin.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Expenses_KES"], name="Expenses (KES)", marker_color="#D97706")
+        )
+        fig_ddiu_fin.update_layout(
+            title="MoniTrac Network Revenue vs. Operating Expenses",
+            barmode="group",
+            height=340,
+            margin=dict(l=20, r=20, t=50, b=20),
+            legend=dict(orientation="h", y=1.12),
+        )
+        st.plotly_chart(fig_ddiu_fin, use_container_width=True)
+
+    st.markdown("#### 🎯 Role-Based DDIU Action Plan (M&E, Medical & Management Mentors)")
+    if not ddiu_data["action_df"].empty:
+        st.dataframe(ddiu_data["action_df"], hide_index=True, use_container_width=True)
+
+    col_w, col_q = st.columns(2)
+    with col_w:
+        st.markdown("#### 🌟 Partner Highlights — What Facilities Did Well")
+        if not ddiu_data["well_df"].empty:
+            st.dataframe(
+                ddiu_data["well_df"][["Facility", "PV_Current", "PV_MoM_%", "PV_YoY_%", "Total_Deliveries", "Net_Surplus_KES"]],
+                hide_index=True,
+                use_container_width=True,
+            )
+    with col_q:
+        st.markdown("#### 🚨 DQA Queries & Facilities Requiring Follow-Up")
+        if not ddiu_data["follow_up_df"].empty:
+            st.dataframe(
+                ddiu_data["follow_up_df"][["Facility", "PV_Current", "Total_Deliveries", "Queries"]],
+                hide_index=True,
+                use_container_width=True,
             )
