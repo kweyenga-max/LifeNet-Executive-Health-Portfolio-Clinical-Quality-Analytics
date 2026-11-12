@@ -5,3 +5,8 @@
 project_backup_*/
 __pycache__/
 *.pyc
+
+.streamlit/secrets.toml
+project_backup_*/
+__pycache__/
+*.pyc
