@@ -4828,6 +4828,70 @@ elif active_tab == "📑 Monthly DDIU Brief":
         )
         st.plotly_chart(fig_ddiu_fin, use_container_width=True)
 
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+    em1, em2 = st.columns(2)
+    with em1:
+        fig_ddiu_pph = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_ddiu_pph.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["PPH_Cases"], name="PPH Cases Managed", marker_color="#D97706"),
+            secondary_y=False,
+        )
+        fig_ddiu_pph.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["PPH_Deaths"], name="PPH Deaths", marker_color="#DC2626"),
+            secondary_y=False,
+        )
+        fig_ddiu_pph.add_trace(
+            go.Scatter(
+                x=trend_df["Short_Period"],
+                y=trend_df["PPH_Success_Pct"],
+                name="PPH Survival %",
+                mode="lines+markers",
+                line=dict(color="#0D9488", width=3),
+            ),
+            secondary_y=True,
+        )
+        fig_ddiu_pph.update_layout(
+            title="PPH Cases Managed & Management Survival Rate (%)",
+            barmode="group",
+            height=340,
+            margin=dict(l=20, r=20, t=50, b=20),
+            legend=dict(orientation="h", y=1.12),
+        )
+        fig_ddiu_pph.update_yaxes(title_text="Cases", secondary_y=False)
+        fig_ddiu_pph.update_yaxes(title_text="Survival %", range=[0, 110], secondary_y=True)
+        st.plotly_chart(fig_ddiu_pph, use_container_width=True)
+
+    with em2:
+        fig_ddiu_apgar = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_ddiu_apgar.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Low_APGAR"], name="Low APGAR Births", marker_color="#0A2540"),
+            secondary_y=False,
+        )
+        fig_ddiu_apgar.add_trace(
+            go.Bar(x=trend_df["Short_Period"], y=trend_df["Maternal_Deaths"], name="Maternal Deaths", marker_color="#DC2626"),
+            secondary_y=False,
+        )
+        fig_ddiu_apgar.add_trace(
+            go.Scatter(
+                x=trend_df["Short_Period"],
+                y=trend_df["APGAR_Success_Pct"],
+                name="Resuscitation Success %",
+                mode="lines+markers",
+                line=dict(color="#00A8CC", width=3),
+            ),
+            secondary_y=True,
+        )
+        fig_ddiu_apgar.update_layout(
+            title="Low APGAR Births, Resuscitation Success (%) & Maternal Deaths",
+            barmode="group",
+            height=340,
+            margin=dict(l=20, r=20, t=50, b=20),
+            legend=dict(orientation="h", y=1.12),
+        )
+        fig_ddiu_apgar.update_yaxes(title_text="Cases / Deaths", secondary_y=False)
+        fig_ddiu_apgar.update_yaxes(title_text="Success %", range=[0, 110], secondary_y=True)
+        st.plotly_chart(fig_ddiu_apgar, use_container_width=True)
+
     st.markdown("#### 🎯 Role-Based DDIU Action Plan (M&E, Medical & Management Mentors)")
     if not ddiu_data["action_df"].empty:
         st.dataframe(ddiu_data["action_df"], hide_index=True, use_container_width=True)

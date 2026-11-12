@@ -246,13 +246,35 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
 
     for tp in trend_periods:
         pv_sum = float(df_pv[df_pv["Period"] == tp]["PV"].sum())
-        del_sum = float(_get_kpi_series("MOH 711 Normal Deliveries", tp).sum() + _get_kpi_series("MOH 711 Caesarian Sections", tp).sum())
+        del_sum = float(
+            _get_kpi_series("MOH 711 Normal Deliveries", tp).sum()
+            + _get_kpi_series("MOH 711 Caesarian Sections", tp).sum()
+            + _get_kpi_series("MOH 711 Breach Delivery", tp).sum()
+            + _get_kpi_series("MOH 711 Assisted vaginal delivery", tp).sum()
+        )
+        pph_t = int(_get_kpi_series("MOH 711 PPH (Post Partum Haemorrage) A", tp).sum())
+        pph_d_t = int(_get_kpi_series("MOH 711 PPH (Post Partum Haemorrage)D", tp).sum())
+        pph_succ_t = ((pph_t - pph_d_t) / pph_t * 100.0) if pph_t > 0 else 100.0
+        apgar_t = int(_get_kpi_series("MOH 711 Births with low APGAR score", tp).sum())
+        asph_t = int(_get_kpi_series("MOH 711 Rev 2020_Neonatal deaths due to Asphyxia", tp).sum())
+        apgar_succ_t = (max(apgar_t - asph_t, 0) / apgar_t * 100.0) if apgar_t > 0 else 100.0
+        md_t = int(
+            _get_kpi_series("MOH 711 Rev 2020_Maternal deaths 20-24 Years", tp).sum()
+            + _get_kpi_series("MOH 711 Rev 2020_Maternal deaths 25+ Years", tp).sum()
+        )
         rev_t, exp_t = fin_map.get(tp, (0.0, 0.0))
         trend_rows.append({
             "Period": tp,
             "Short_Period": f"{tp.split()[0][:3]} '{tp.split()[1][2:]}",
             "Total_PV": pv_sum,
             "Total_Deliveries": del_sum,
+            "PPH_Cases": pph_t,
+            "PPH_Deaths": pph_d_t,
+            "PPH_Success_Pct": round(pph_succ_t, 1),
+            "Low_APGAR": apgar_t,
+            "Asphyxia_Deaths": asph_t,
+            "APGAR_Success_Pct": round(apgar_succ_t, 1),
+            "Maternal_Deaths": md_t,
             "Revenue_KES": rev_t,
             "Expenses_KES": exp_t,
         })
@@ -465,6 +487,42 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
     buf3.seek(0)
     charts["finance_trend"] = buf3
 
+    fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(7.2, 2.35), dpi=220)
+    ax_l.bar(x, trend["PPH_Cases"], width=0.48, color=LN_AMBER, label="PPH Cases")
+    ax_l.set_xticks(x)
+    ax_l.set_xticklabels(trend["Short_Period"], fontsize=7.5, fontweight="bold", color=LN_SLATE)
+    ax_l.set_ylabel("PPH Cases", fontsize=7.8, fontweight="bold", color=LN_AMBER)
+    ax_l.tick_params(axis="y", labelsize=7.5)
+    ax_l.spines["top"].set_visible(False)
+    ax_l2 = ax_l.twinx()
+    ax_l2.plot(x, trend["PPH_Success_Pct"], color=LN_EMERALD, marker="o", linewidth=2, markersize=4.5, label="Survival %")
+    ax_l2.set_ylim(0, 112)
+    ax_l2.set_ylabel("Survival %", fontsize=7.8, fontweight="bold", color=LN_EMERALD)
+    ax_l2.tick_params(axis="y", labelsize=7.5)
+    ax_l2.spines["top"].set_visible(False)
+    ax_l.set_title("PPH Cases & Survival %", fontsize=8.8, fontweight="bold", color=LN_NAVY, loc="left")
+
+    ax_r.bar(x, trend["Low_APGAR"], width=0.48, color=LN_NAVY, label="Low APGAR")
+    ax_r.set_xticks(x)
+    ax_r.set_xticklabels(trend["Short_Period"], fontsize=7.5, fontweight="bold", color=LN_SLATE)
+    ax_r.set_ylabel("Low APGAR Births", fontsize=7.8, fontweight="bold", color=LN_NAVY)
+    ax_r.tick_params(axis="y", labelsize=7.5)
+    ax_r.spines["top"].set_visible(False)
+    ax_r2 = ax_r.twinx()
+    ax_r2.plot(x, trend["APGAR_Success_Pct"], color=LN_TEAL, marker="o", linewidth=2, markersize=4.5, label="Resusc. %")
+    ax_r2.set_ylim(0, 112)
+    ax_r2.set_ylabel("Resusc. Success %", fontsize=7.8, fontweight="bold", color=LN_TEAL)
+    ax_r2.tick_params(axis="y", labelsize=7.5)
+    ax_r2.spines["top"].set_visible(False)
+    ax_r.set_title("Low APGAR & Resuscitation %", fontsize=8.8, fontweight="bold", color=LN_NAVY, loc="left")
+
+    fig.tight_layout()
+    buf4 = io.BytesIO()
+    fig.savefig(buf4, format="png")
+    plt.close(fig)
+    buf4.seek(0)
+    charts["emonc_trend"] = buf4
+
     return charts
 
 
@@ -553,7 +611,9 @@ def generate_ddiu_pdf_bytes(period_label: str, base_dir: Path | None = None) -> 
     story.append(HRFlowable(width="100%", thickness=1, color=c_teal, spaceAfter=6))
     story.append(Image(charts["pv_trend"], width=7.1 * inch, height=2.65 * inch))
     story.append(Spacer(1, 6))
-    story.append(Image(charts["top_facilities"], width=7.1 * inch, height=2.75 * inch))
+    story.append(Image(charts["emonc_trend"], width=7.1 * inch, height=2.25 * inch))
+    story.append(Spacer(1, 4))
+    story.append(Image(charts["top_facilities"], width=7.1 * inch, height=2.55 * inch))
 
     story.append(Paragraph("2. Partner Highlights — What Facilities Did Well", s_sec))
     story.append(HRFlowable(width="100%", thickness=1, color=c_emerald, spaceAfter=6))
