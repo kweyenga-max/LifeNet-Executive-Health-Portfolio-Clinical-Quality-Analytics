@@ -13,3 +13,7 @@ __pycache__/
 
 _local_safety_backup/
 LifeNet-Executive-Health-Portfolio-Clinical-Quality-Analytics/
+
+reports/
+.DS_Store
+**/.DS_Store
