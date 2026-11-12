@@ -1,1 +1,7 @@
 .streamlit/secrets.toml
+
+# Secrets, local backups & cache
+.streamlit/secrets.toml
+project_backup_*/
+__pycache__/
+*.pyc

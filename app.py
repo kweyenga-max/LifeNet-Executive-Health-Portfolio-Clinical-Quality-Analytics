@@ -855,6 +855,194 @@ def load_all_data():
                 qsc_path, sheet_name="Medical QSC Performance", engine="openpyxl"
             )
 
+    # Merge live KHIS PV & KPI data (rolling LAST_MONTH) without altering QSC or Finance
+    try:
+        from scripts.khis_adapter import get_live_pv_and_kpi_frames
+        df_pv_live, df_kpi_live_wide = get_live_pv_and_kpi_frames("IwUxQNFazpx", "IPjuLUsTQHG")
+        if not df_pv_live.empty:
+            if df_pv is not None and not df_pv.empty:
+                live_periods = set(df_pv_live["Period"].unique())
+                df_pv = pd.concat([df_pv[~df_pv["Period"].isin(live_periods)], df_pv_live], ignore_index=True)
+            else:
+                df_pv = df_pv_live
+        if not df_kpi_live_wide.empty and len(df_kpi_live_wide.columns) > 1:
+            cols_2025 = ["organisationunitname"] + [c for c in df_kpi_live_wide.columns if c.endswith(" 2025")]
+            cols_2026 = ["organisationunitname"] + [c for c in df_kpi_live_wide.columns if c.endswith(" 2026")]
+
+            if len(cols_2025) > 1:
+                df_live_2025 = df_kpi_live_wide[cols_2025]
+                if df_kpi_2025 is not None and not df_kpi_2025.empty:
+                    overlap_25 = [c for c in df_live_2025.columns if c != "organisationunitname" and c in df_kpi_2025.columns]
+                    df_kpi_2025 = pd.merge(df_kpi_2025.drop(columns=overlap_25), df_live_2025, on="organisationunitname", how="outer")
+                else:
+                    df_kpi_2025 = df_live_2025
+
+            if len(cols_2026) > 1:
+                df_live_2026 = df_kpi_live_wide[cols_2026]
+                if df_kpi_2026 is not None and not df_kpi_2026.empty:
+                    overlap_26 = [c for c in df_live_2026.columns if c != "organisationunitname" and c in df_kpi_2026.columns]
+                    df_kpi_2026 = pd.merge(df_kpi_2026.drop(columns=overlap_26), df_live_2026, on="organisationunitname", how="outer")
+                else:
+                    df_kpi_2026 = df_live_2026
+    except Exception as e:
+        st.sidebar.warning(f"Live KHIS sync skipped (using offline baseline): {e}")
+
+
+    # Dynamic Multi-Section Clinical Data Quality Audit Engine (2025 & 2026 Excel + Live KHIS)
+    def _run_multisection_dq_audit(df_yr, yr_str):
+        if df_yr is None or df_yr.empty or "organisationunitname" not in df_yr.columns:
+            return []
+        all_months = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]
+        found = []
+        audit_cols = [c for c in df_yr.columns if "audit" in c.lower() and "maternal" in c.lower()]
+
+        for _, row in df_yr.iterrows():
+            fac = str(row.get("organisationunitname", "")).strip()
+            if not fac or fac.upper() in ("TOTAL", "OVERALL TOTAL", "NAN"):
+                continue
+
+            for m in all_months:
+                def val(prefix):
+                    col = f"{prefix} {m} {yr_str}"
+                    if col in df_yr.columns:
+                        v = pd.to_numeric(row[col], errors="coerce")
+                        return 0.0 if pd.isna(v) else float(v)
+                    return 0.0
+
+                def has_any(prefixes):
+                    return any(f"{p} {m} {yr_str}" in df_yr.columns for p in prefixes)
+
+                # 1. Maternity Deliveries vs. Birth Outcomes
+                deliv_prefixes = [
+                    "MOH 711 Normal Deliveries",
+                    "MOH 711 Caesarian Sections",
+                    "MOH 711 Assisted vaginal delivery",
+                    "MOH 711 Breach Delivery",
+                ]
+                outcome_prefixes = [
+                    "MOH 711 Live birth",
+                    "MOH 711 Fresh Still Birth",
+                    "MOH 711 Macerated still Birth",
+                ]
+                if has_any(deliv_prefixes) and has_any(outcome_prefixes):
+                    tot_deliv = sum(val(p) for p in deliv_prefixes)
+                    tot_out = sum(val(p) for p in outcome_prefixes)
+                    if abs(tot_deliv - tot_out) > 0:
+                        found.append({
+                            "Year": yr_str,
+                            "Month": m,
+                            "Facility": fac,
+                            "Issue Category": "Birth Outcomes Discrepancy",
+                            "Description": f"Total Deliveries ({int(tot_deliv)}) != Total Birth Outcomes ({int(tot_out)}) [Diff: {int(tot_deliv - tot_out):+d}]"
+                        })
+
+                # 2. Birth Asphyxia: Outcome (Death) without Cases / Exceeding Cases
+                asph_d = val("MOH 711 Rev 2020_Neonatal deaths due to Asphyxia")
+                low_apgar = val("MOH 711 Births with low APGAR score")
+                neo_d = val("MOH 711 Neonatal deaths 0-28 Days")
+                if asph_d > 0 and low_apgar == 0:
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "Asphyxia Outcome Without Cases",
+                        "Description": f"Neonatal deaths due to Asphyxia = {int(asph_d)}, but Births with low APGAR score (Asphyxia cases) = 0"
+                    })
+                elif asph_d > low_apgar and low_apgar > 0:
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "Asphyxia Outcome Without Cases",
+                        "Description": f"Asphyxia deaths ({int(asph_d)}) exceed reported low APGAR cases ({int(low_apgar)})"
+                    })
+                if asph_d > 0 and neo_d > 0 and asph_d > neo_d:
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "Neonatal Mortality Discrepancy",
+                        "Description": f"Asphyxia deaths ({int(asph_d)}) exceed total Neonatal deaths 0-28 Days ({int(neo_d)})"
+                    })
+
+                # 3. Postpartum Hemorrhage (PPH): PPH D without PPH Cases (PPH A + D)
+                pph_a = val("MOH 711 PPH (Post Partum Haemorrage) A")
+                pph_d = val("MOH 711 PPH (Post Partum Haemorrage) D")
+                pph_total = pph_a + pph_d
+                if pph_d > 0 and pph_total == 0:
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "PPH Outcome Without Cases",
+                        "Description": f"PPH Death (PPH D = {int(pph_d)}) reported with 0 total PPH cases (PPH A + D = 0)"
+                    })
+                elif pph_d > 0 and pph_a == 0:
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "PPH Outcome Without Cases",
+                        "Description": f"PPH Death (PPH D = {int(pph_d)}) recorded with 0 surviving PPH cases (PPH A = 0; Total PPH A+D = {int(pph_total)}) — verify case register"
+                    })
+
+                # 4. Maternal Deaths & MPDSR Audit Reconciliation
+                md_10_14 = val("MOH 711 Rev 2020_Maternal deaths 10-14Years")
+                md_15_19 = val("MOH 711 Rev 2020_Maternal deaths 15-19Years")
+                md_20_24 = val("MOH 711 Rev 2020_Maternal deaths 20-24 Years")
+                md_25_plus = val("MOH 711 Rev 2020_Maternal deaths 25+ Years")
+                tot_md = md_10_14 + md_15_19 + md_20_24 + md_25_plus
+                if tot_md > 0:
+                    m_audit_cols = [c for c in audit_cols if f"{m} {yr_str}" in c]
+                    audited_cnt = sum(
+                        0.0 if pd.isna(pd.to_numeric(row[c], errors="coerce")) else float(pd.to_numeric(row[c], errors="coerce"))
+                        for c in m_audit_cols
+                    )
+                    age_breakdown = ", ".join(
+                        f"{lbl}:{int(v)}" for lbl, v in [
+                            ("10-14y", md_10_14), ("15-19y", md_15_19), ("20-24y", md_20_24), ("25+y", md_25_plus)
+                        ] if v > 0
+                    )
+                    if not m_audit_cols:
+                        audit_note = "MPDSR Audit indicator not captured in KHIS extract — field audit verification mandatory"
+                    elif audited_cnt < tot_md:
+                        audit_note = f"Unaudited Maternal Deaths: {int(audited_cnt)} audited vs {int(tot_md)} deaths"
+                    else:
+                        audit_note = f"All {int(tot_md)} maternal death(s) logged as audited ({int(audited_cnt)}) — verify MPDSR minutes"
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "Maternal Death & MPDSR Audit",
+                        "Description": f"Maternal Deaths = {int(tot_md)} ({age_breakdown}) | {audit_note}"
+                    })
+
+                # 5. Perinatal Mortality Consistency
+                peri_d = val("MOH 711 Rev 2020_Perinatal Deaths 0-7 days")
+                fsb = val("MOH 711 Fresh Still Birth")
+                if peri_d > 0 and (fsb + neo_d) > 0 and peri_d > (fsb + neo_d):
+                    found.append({
+                        "Year": yr_str,
+                        "Month": m,
+                        "Facility": fac,
+                        "Issue Category": "Perinatal Mortality Discrepancy",
+                        "Description": f"Perinatal Deaths 0-7d ({int(peri_d)}) > Fresh Still Births ({int(fsb)}) + Neonatal Deaths 0-28d ({int(neo_d)})"
+                    })
+        return found
+
+    dyn_issues = _run_multisection_dq_audit(df_kpi_2025, "2025") + _run_multisection_dq_audit(df_kpi_2026, "2026")
+    if dyn_issues:
+        df_dyn_issues = pd.DataFrame(dyn_issues)
+        if df_issues is not None and not df_issues.empty:
+            df_issues["Year"] = df_issues["Year"].astype(str).str.strip()
+            df_issues = pd.concat([df_issues, df_dyn_issues], ignore_index=True)
+            df_issues = df_issues.drop_duplicates(subset=["Year", "Month", "Facility", "Issue Category"], keep="last")
+        else:
+            df_issues = df_dyn_issues
+
     return df_pv, df_kpi_2025, df_kpi_2026, df_issues, df_qsc_mgmt, df_qsc_med
 
 
@@ -3370,198 +3558,38 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
 # TAB 4: DATA QUALITY AUDITS
 # ---------------------------------------------------------
 elif active_tab == "🚨 Data Quality Audits":
-    st.markdown('''
-<style>
-/* Force white text in all Streamlit text areas and input fields */
-textarea, input, 
-div[data-baseweb="textarea"] textarea, 
-div[data-baseweb="input"] input {
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
-    background-color: #1E293B !important;
-    font-size: 15px !important;
-    font-weight: 600 !important;
-}
-
-/* Style input placeholders to light slate */
-textarea::placeholder, input::placeholder,
-div[data-baseweb="textarea"] textarea::placeholder, 
-div[data-baseweb="input"] input::placeholder {
-    color: #94A3B8 !important;
-    -webkit-text-fill-color: #94A3B8 !important;
-}
-</style>
-''', unsafe_allow_html=True)
+    st.markdown("""<style>
+    [data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] label {
+        color: #0F172A !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stTextInput"] input,
+    [data-testid="stTextArea"] textarea {
+        color: #FFFFFF !important;
+        caret-color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+    [data-testid="stTextInput"] input::placeholder,
+    [data-testid="stTextArea"] textarea::placeholder {
+        color: #CBD5E1 !important;
+        opacity: 1 !important;
+        -webkit-text-fill-color: #CBD5E1 !important;
+    }
+    [data-testid="stFormSubmitButton"] button,
+    [data-testid="stFormSubmitButton"] button p {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        font-weight: 600 !important;
+    }
+    </style>""", unsafe_allow_html=True)
     import json
     import os
-    import pandas as pd
 
-    # Force high contrast text colors for input fields across Streamlit themes
-    st.markdown("""
-        <style>
-    /* Force high contrast for all Streamlit input boxes & text areas */
-    div[data-baseweb="textarea"] textarea {
-        color: #0F172A !important;
-        background-color: #FFFFFF !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        border: 2px solid #CBD5E1 !important;
-        -webkit-text-fill-color: #0F172A !important;
-    }
-    div[data-baseweb="input"] input {
-        color: #0F172A !important;
-        background-color: #FFFFFF !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        border: 2px solid #CBD5E1 !important;
-        -webkit-text-fill-color: #0F172A !important;
-    }
-    div[data-baseweb="textarea"] textarea::placeholder, div[data-baseweb="input"] input::placeholder {
-        color: #64748B !important;
-        -webkit-text-fill-color: #64748B !important;
-    }
-    div.stButton > button, div[data-testid="stFormSubmitButton"] > button {
-        background-color: #0284C7 !important;
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-        font-size: 15px !important;
-        border-radius: 6px !important;
-        border: none !important;
-        padding: 10px 24px !important;
-    }
-</style>
-    """, unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#0F172A; font-weight:800;'>🚨 KHIS Data Quality & Field Verification Workspace</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748B;'>Real-time anomaly tracking, Program Officer field findings, and Sub-County M&E escalation management.</p>", unsafe_allow_html=True)
 
-    st.markdown("<h2 style='color:#0F172A; font-weight:800;'>🚨 KHIS Clinical Data Quality & Field Verification Workspace</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#64748B;'>Programmatic cross-validation tracking maternal sentinel events, PPH/neonatal outcome discordance, and Sub-County escalation briefs across all 38 facilities.</p>", unsafe_allow_html=True)
-
-    # 1. SOP User Guide
-    with st.expander("📖 User Guide: Field Verification & Sub-County Escalation Workflow", expanded=False):
-        st.markdown("""
-        <div style="background-color:#1E293B; padding:15px; border-radius:8px; border-left:4px solid #38BDF8; color:#F8FAFC;">
-            <h4 style="color:#38BDF8; margin-top:0;">📌 Standard Operating Procedure (SOP)</h4>
-            <ol style="line-height:1.8;">
-                <li><b>Filter & Locate:</b> Select your target facility or issue category using the top filter controls.</li>
-                <li><b>Ground-Truth Register Check:</b> Audit physical ward registers (e.g., Maternity Register MOH 333, Partographs, MPDSR committee reports).</li>
-                <li><b>Log Verification Findings:</b> Enter your findings into the text area (e.g., <i>"MOH 333 checked; 1 PPH case omitted on MoH 711 summary"</i>). <span style="color:#F59E0B;">(Optional: Attachments are not required)</span>.</li>
-                <li><b>Update Resolution Status:</b> 
-                    <ul>
-                        <li><b>🔴 Unverified:</b> Pending ground-truth field audit.</li>
-                        <li><b>🟡 Under Sub-County Review:</b> Findings submitted to SCHRIO for KHIS database adjustment.</li>
-                        <li><b>🟢 KHIS Corrected:</b> Confirmed amended in KHIS.</li>
-                    </ul>
-                </li>
-                <li><b>Export SCHRIO Brief:</b> Expand the <i>"Generate Sub-County KHIS Correction Brief"</i> card to copy the standardized escalation brief.</li>
-            </ol>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
-
-    months_list = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September']
-    all_dqa_issues = []
-
-    def extract_dqa_anomalies(df_year, year_str):
-        issues = []
-        if df_year is None or df_year.empty:
-            return issues
-            
-        for idx, row in df_year.iterrows():
-            fac = row.get('organisationunitname', row.get('Facility', 'Unknown Facility'))
-            for m in months_list:
-                # Deliveries
-                ass_vag = float(row.get(f'MOH 711 Assisted vaginal delivery {m} {year_str}', 0) or 0)
-                breech = float(row.get(f'MOH 711 Breach Delivery {m} {year_str}', 0) or 0)
-                cs = float(row.get(f'MOH 711 Caesarian Sections {m} {year_str}', 0) or 0)
-                normal = float(row.get(f'MOH 711 Normal Deliveries {m} {year_str}', 0) or 0)
-                tot_del = ass_vag + breech + cs + normal
-                
-                # Outcomes
-                live = float(row.get(f'MOH 711 Live birth {m} {year_str}', 0) or 0)
-                fsb = float(row.get(f'MOH 711 Fresh Still Birth {m} {year_str}', 0) or 0)
-                msb = float(row.get(f'MOH 711 Macerated still Birth {m} {year_str}', 0) or 0)
-                tot_outcomes = live + fsb + msb
-                
-                # Clinical indicators
-                apgar = float(row.get(f'MOH 711 Births with low APGAR score {m} {year_str}', 0) or 0)
-                asphyxia_deaths = float(row.get(f'MOH 711 Rev 2020_Neonatal deaths due to Asphyxia {m} {year_str}', 0) or 0)
-                pph_a = float(row.get(f'MOH 711 PPH (Post Partum Haemorrage) A {m} {year_str}', 0) or 0)
-                pph_d = float(row.get(f'MOH 711 PPH (Post Partum Haemorrage) D {m} {year_str}', 0) or 0)
-                
-                mat_10_14 = float(row.get(f'MOH 711 Rev 2020_Maternal deaths 10-14Years {m} {year_str}', 0) or 0)
-                mat_15_19 = float(row.get(f'MOH 711 Rev 2020_Maternal deaths 15-19Years {m} {year_str}', 0) or 0)
-                mat_20_24 = float(row.get(f'MOH 711 Rev 2020_Maternal deaths 20-24 Years {m} {year_str}', 0) or 0)
-                mat_25_plus = float(row.get(f'MOH 711 Rev 2020_Maternal deaths 25+ Years {m} {year_str}', 0) or 0)
-                tot_mat_deaths = mat_10_14 + mat_15_19 + mat_20_24 + mat_25_plus
-
-                # 1. Maternal Sentinel Death Audit
-                if tot_mat_deaths > 0:
-                    issues.append({
-                        "Year": year_str, "Month": m, "Facility": fac,
-                        "Issue Category": "🚨 Maternal Death MPDSR Audit",
-                        "Description": f"{int(tot_mat_deaths)} Maternal Death(s) logged in {m} {year_str}. Ground-truth MPDSR committee report & KHIS notification required."
-                    })
-                    
-                # 2. PPH Outcome Without Case
-                if pph_d > 0 and pph_a == 0:
-                    issues.append({
-                        "Year": year_str, "Month": m, "Facility": fac,
-                        "Issue Category": "🩸 PPH Outcome Without Case",
-                        "Description": f"{int(pph_d)} PPH Death(s) recorded but 0 PPH cases documented in MoH 711. Reconcile Maternity register (MOH 333)."
-                    })
-
-                # 3. Asphyxia Death Without Low APGAR Flag
-                if asphyxia_deaths > 0 and apgar == 0:
-                    issues.append({
-                        "Year": year_str, "Month": m, "Facility": fac,
-                        "Issue Category": "👶 Asphyxia Death Without Low APGAR Flag",
-                        "Description": f"{int(asphyxia_deaths)} Neonatal Asphyxia Death(s) recorded, but 0 Low APGAR score births documented. Reconcile delivery summary."
-                    })
-
-                # 4. Fresh Still Birth Without Delivery Volume
-                if fsb > 0 and tot_del == 0:
-                    issues.append({
-                        "Year": year_str, "Month": m, "Facility": fac,
-                        "Issue Category": "⚠️ Outcome Without Delivery Volume",
-                        "Description": f"{int(fsb)} Fresh Stillbirth(s) logged, but Total Deliveries reported as 0. Audit MoH 711 monthly summary."
-                    })
-                    
-                # 5. Birth Outcomes Discrepancy
-                if tot_del != tot_outcomes and tot_del > 0:
-                    issues.append({
-                        "Year": year_str, "Month": m, "Facility": fac,
-                        "Issue Category": "Birth Outcomes Discrepancy",
-                        "Description": f"Outcomes ({tot_outcomes}) != Deliveries ({tot_del}). Variance: {tot_outcomes - tot_del:+g}."
-                    })
-        return issues
-
-    # Direct Master Excel file loader
-    excel_file = "Cleaned_KPI_Master.xlsx"
-    if not os.path.exists(excel_file):
-        excel_file = "data/Cleaned_KPI_Master.xlsx"
-
-    if os.path.exists(excel_file):
-        try:
-            xls_master = pd.ExcelFile(excel_file)
-            if '2025 Data' in xls_master.sheet_names:
-                df_2025_direct = pd.read_excel(xls_master, '2025 Data')
-                all_dqa_issues.extend(extract_dqa_anomalies(df_2025_direct, '2025'))
-            if '2026 Data' in xls_master.sheet_names:
-                df_2026_direct = pd.read_excel(xls_master, '2026 Data')
-                all_dqa_issues.extend(extract_dqa_anomalies(df_2026_direct, '2026'))
-        except Exception as e:
-            pass
-
-    if not all_dqa_issues:
-        if 'df_2025' in locals():
-            all_dqa_issues.extend(extract_dqa_anomalies(df_2025, '2025'))
-        if 'df_2026' in locals():
-            all_dqa_issues.extend(extract_dqa_anomalies(df_2026, '2026'))
-
-    df_dqa = pd.DataFrame(all_dqa_issues) if all_dqa_issues else pd.DataFrame()
-
-    if df_dqa.empty:
-        st.success("🎉 No clinical data quality issues or sentinel discrepancies flagged across all 38 facilities!")
+    if kpi_issues.empty:
+        st.success("🎉 No data quality issues flagged across reporting periods!")
     else:
         COMMENTS_FILE = "data/data_quality_comments.json"
         os.makedirs("data", exist_ok=True)
@@ -3574,7 +3602,8 @@ div[data-baseweb="input"] input::placeholder {
         else:
             comments_db = {}
 
-        df_issues = df_dqa.copy()
+        df_issues = kpi_issues.copy()
+
         df_issues["Record_ID"] = df_issues.apply(
             lambda r: f"{r.get('Year','')}_{r.get('Month','')}_{r.get('Facility','')}_{r.get('Issue Category','')}", axis=1
         )
@@ -3591,7 +3620,7 @@ div[data-baseweb="input"] input::placeholder {
             sel_fac = st.selectbox("🏥 Filter Facility", all_facs)
 
         with col_f2:
-            all_years = ["All Years"] + sorted([str(y) for y in df_issues["Year"].dropna().unique().tolist() if str(y).strip()])
+            all_years = ["All Years"] + sorted([str(y) for y in df_issues["Year"].dropna().unique().tolist()])
             sel_year = st.selectbox("📅 Filter Year", all_years)
 
         with col_f3:
@@ -3612,7 +3641,6 @@ div[data-baseweb="input"] input::placeholder {
         if sel_status != "All Statuses":
             filtered_df = filtered_df[filtered_df["Status"] == sel_status]
 
-        # 2. Metric Cards
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("🚨 Flagged Anomalies", len(filtered_df))
         m2.metric("🔴 Pending Field Review", len(filtered_df[filtered_df["Status"] == "🔴 Unverified"]))
@@ -3621,14 +3649,14 @@ div[data-baseweb="input"] input::placeholder {
 
         st.markdown("---")
 
-        st.markdown("### 📋 Clinical Anomaly Audit Log")
+        st.markdown("### 📋 Anomaly Audit Log")
         display_cols = [c for c in ["Year", "Month", "Facility", "Issue Category", "Description", "Status", "PO_Notes", "Updated_By"] if c in filtered_df.columns]
         st.dataframe(filtered_df[display_cols], hide_index=True, use_container_width=True)
 
         st.markdown("---")
 
         st.markdown("### ✍️ Program Officer Field Action & Comment Engine")
-        st.info("💡 Select an anomaly below, record ground-truth register findings, and generate escalation briefs for SCHRIOs.")
+        st.info("💡 Program Officers can select an anomaly below, add field verification findings, and flag for Sub-County KHIS correction.")
 
         if not filtered_df.empty:
             record_options = filtered_df["Record_ID"].tolist()
@@ -3641,46 +3669,25 @@ div[data-baseweb="input"] input::placeholder {
             rec_row = filtered_df[filtered_df["Record_ID"] == selected_rec_id].iloc[0]
 
             with st.form("field_comment_form", clear_on_submit=False):
-                st.markdown("<h3 style='color:#0F172A; font-weight:800; margin-bottom:15px;'>✍️ Field Verification & Escalation Entry Form</h3>", unsafe_allow_html=True)
-                
                 c_a1, c_a2 = st.columns(2)
                 with c_a1:
-                    st.markdown("<p style='color:#475569; font-weight:700; margin-bottom:2px;'>🏥 Target Facility:</p>", unsafe_allow_html=True)
-                    st.markdown(f"<p style='color:#0F172A; font-size:16px; font-weight:700;'>{rec_row.get('Facility','')}</p>", unsafe_allow_html=True)
-                    
-                    st.markdown("<p style='color:#475569; font-weight:700; margin-bottom:2px;'>📅 Reporting Period:</p>", unsafe_allow_html=True)
-                    st.markdown(f"<p style='color:#0F172A; font-size:16px; font-weight:700;'>{rec_row.get('Month','')} {rec_row.get('Year','')}</p>", unsafe_allow_html=True)
-                    
-                    st.markdown("<p style='color:#475569; font-weight:700; margin-bottom:2px;'>🏷️ Issue Category:</p>", unsafe_allow_html=True)
-                    st.markdown(f"<p style='color:#0284C7; font-size:15px; font-weight:700;'>{rec_row.get('Issue Category','')}</p>", unsafe_allow_html=True)
-                    
-                    st.markdown("<p style='color:#475569; font-weight:700; margin-bottom:2px;'>🚨 Flag Description:</p>", unsafe_allow_html=True)
-                    st.markdown(f"<div style='background-color:#F1F5F9; color:#0F172A; font-size:14px; font-weight:500; padding:12px; border-radius:8px; border-left:4px solid #0284C7;'>{rec_row.get('Description','')}</div>", unsafe_allow_html=True)
+                    st.write(f"**Facility:** {rec_row.get('Facility','')}")
+                    st.write(f"**Period:** {rec_row.get('Month','')} {rec_row.get('Year','')}")
+                    st.write(f"**Anomaly Description:** {rec_row.get('Description','')}")
 
                 with c_a2:
                     current_status = rec_row.get("Status", "🔴 Unverified")
                     status_options = ["🔴 Unverified", "🟡 Under Sub-County Review", "🟢 KHIS Corrected"]
                     status_idx = status_options.index(current_status) if current_status in status_options else 0
-                    
-                    st.markdown("<p style='color:#0F172A; font-weight:700; font-size:15px; margin-bottom:4px;'>1. 📌 Update Anomaly Status:</p>", unsafe_allow_html=True)
-                    new_status = st.selectbox("Update Status", status_options, index=status_idx, label_visibility="collapsed")
-                    
-                    st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
-                    st.markdown("<p style='color:#0F172A; font-weight:700; font-size:15px; margin-bottom:4px;'>2. 👤 Data Verifier / Program Officer Name:</p>", unsafe_allow_html=True)
-                    existing_officer = rec_row.get("Updated_By", "") if rec_row.get("Updated_By") != "--" else ""
-                    officer_name = st.text_input("Officer Name", value=existing_officer, placeholder="Enter your full name & role (e.g., Kelvin Obiweyenga - M&E Officer)...", label_visibility="collapsed")
+                    new_status = st.selectbox("Update Anomaly Status:", status_options, index=status_idx)
+                    officer_name = st.text_input("Program Officer Name / Role:", value=rec_row.get("Updated_By", "") if rec_row.get("Updated_By") != "--" else "", placeholder="e.g., Kelvin Obiweyenga — M&E / Program Officer")
 
-                st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#0F172A; font-weight:700; font-size:15px; margin-bottom:4px;'>3. 📝 Field Verification Findings & Register Audit Notes:</p>", unsafe_allow_html=True)
                 po_notes_input = st.text_area(
-                    "Field Notes",
+                    "Field Verification Findings & Sub-County Action Notes:",
                     value=rec_row.get("PO_Notes", "") if rec_row.get("PO_Notes") != "--" else "",
-                    placeholder="Enter register check details (e.g. MOH 333 entry verified; 3 PPH cases were misclassified; MPDSR audit completed)...",
-                    height=130,
-                    label_visibility="collapsed"
+                    placeholder="Enter register check details, cause of entry discrepancy, or sub-county follow-up status..."
                 )
 
-                st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
                 submit_btn = st.form_submit_button("💾 Save Field Audit Record")
 
                 if submit_btn:
@@ -3694,34 +3701,22 @@ div[data-baseweb="input"] input::placeholder {
                     st.success("✅ Verification record saved successfully!")
                     st.rerun()
 
-            # Dynamic Brief Generator
-            saved_info = comments_db.get(selected_rec_id, {})
-            display_notes = saved_info.get("notes", po_notes_input if po_notes_input.strip() else "--")
-            display_officer = saved_info.get("updated_by", officer_name if officer_name.strip() else "M&E Team")
-            display_status = saved_info.get("status", new_status)
-
             with st.expander("📤 Generate Sub-County KHIS Correction Brief"):
                 st.markdown("**Draft brief for Sub-County Health Records Officer (SCHRIO):**")
-                b_fac = rec_row.get("Facility", "")
-                b_m = rec_row.get("Month", "")
-                b_y = rec_row.get("Year", "")
-                b_cat = rec_row.get("Issue Category", "")
-                b_desc = rec_row.get("Description", "")
-                
                 brief_text = f"""SUB-COUNTY KHIS DATA CORRECTION BRIEF
 ----------------------------------------------------
-Facility: {b_fac}
-Reporting Period: {b_m} {b_y}
-Issue Category: {b_cat}
+Facility: {rec_row.get('Facility','')}
+Reporting Period: {rec_row.get('Month','')} {rec_row.get('Year','')}
+Issue Category: {rec_row.get('Issue Category','')}
 
 KHIS Anomaly Flag:
-{b_desc}
+{rec_row.get('Description','')}
 
 Program Officer Field Audit Findings:
-{display_notes}
+{po_notes_input if po_notes_input.strip() else 'Awaiting field visit verification notes.'}
 
-Resolution Status: {display_status}
-Logged By: {display_officer}
+Resolution Status: {new_status}
+Logged By: {officer_name if officer_name.strip() else 'M&E Team'}
 ----------------------------------------------------"""
                 st.code(brief_text, language="markdown")
 
@@ -4710,21 +4705,3 @@ elif active_tab == "💼 Financial Performance":
             """,
                 unsafe_allow_html=True,
             )
-# ==========================================
-
-# ==========================================
-
-# ==========================================
-# LIVE KHIS INTEGRATION PIPELINE
-# ==========================================
-from scripts.khis_adapter import get_live_cleaned_dataset
-
-PV_VISUALIZATION_UID = "IwUxQNFazpx"
-KPI_VISUALIZATION_UID = "IPjuLUsTQHG"
-
-try:
-    df_live = get_live_cleaned_dataset(PV_VISUALIZATION_UID, KPI_VISUALIZATION_UID)
-    if not df_live.empty:
-        df = df_live
-except Exception as e:
-    st.sidebar.warning("Using offline fallback data.")
