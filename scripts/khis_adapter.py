@@ -209,7 +209,16 @@ def get_live_cleaned_dataset(pv_uid, kpi_uid, target_period=None):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", target_period=None):
+def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", target_period=None, force_live=False):
+    if not force_live and target_period is None and os.path.exists(PV_SNAPSHOT_PATH) and os.path.exists(KPI_SNAPSHOT_PATH):
+        try:
+            df_pv_snap = pd.read_csv(PV_SNAPSHOT_PATH, compression="gzip")
+            df_kpi_snap = pd.read_csv(KPI_SNAPSHOT_PATH, compression="gzip")
+            if not df_pv_snap.empty and not df_kpi_snap.empty:
+                return df_pv_snap, df_kpi_snap
+        except Exception:
+            pass
+
     df_pv_raw = fetch_and_adapt_khis_visualization(pv_uid, target_period=target_period, timeout=15)
     df_pv_raw = _apply_dq_cleaning(df_pv_raw)
 
