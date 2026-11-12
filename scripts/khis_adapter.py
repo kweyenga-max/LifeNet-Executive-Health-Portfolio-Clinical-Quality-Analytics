@@ -1,23 +1,27 @@
 from datetime import date
+import os
 import pandas as pd
 import requests
 import streamlit as st
 import urllib3
-import apply_dq_patch as dq_audit
 
-# Suppress SSL certificate verification warnings in logs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 COLUMN_RENAME_MAP = {
     "ou": "facility_name",
     "pe": "period",
-    "dx": "data_element"
+    "dx": "data_element",
 }
+
+DATA_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+)
+PV_SNAPSHOT_PATH = os.path.join(DATA_DIR, "khis_pv_snapshot.csv.gz")
+KPI_SNAPSHOT_PATH = os.path.join(DATA_DIR, "khis_kpi_snapshot.csv.gz")
 
 
 def _apply_dq_cleaning(df):
-    if hasattr(dq_audit, "clean_pv_and_kpi_data"):
-        return _apply_dq_cleaning(df)
     if df is None or df.empty:
         return df
     df = df.copy()
@@ -29,12 +33,22 @@ def _apply_dq_cleaning(df):
     return df
 
 
+def _get_khis_credentials():
+    try:
+        khis_sec = st.secrets.get("khis", {})
+        url = khis_sec.get("url") or os.getenv("KHIS_BASE_URL", "")
+        user = khis_sec.get("username") or os.getenv("KHIS_USERNAME", "")
+        pwd = khis_sec.get("password") or os.getenv("KHIS_PASSWORD", "")
+        return str(url).rstrip("/"), str(user), str(pwd)
+    except Exception:
+        return (
+            os.getenv("KHIS_BASE_URL", "").rstrip("/"),
+            os.getenv("KHIS_USERNAME", ""),
+            os.getenv("KHIS_PASSWORD", ""),
+        )
+
+
 def _get_rolling_focus_and_baseline_periods():
-    """
-    Returns full Q4 of last year (Oct, Nov, Dec) plus the dynamic rolling
-    completed month(s) of the current cycle.
-    In Nov 2026 -> ['202510', '202511', '202512', '202610']
-    """
     today = date.today()
     if today.month == 1:
         focus_year, focus_month = today.year - 1, 12
@@ -62,7 +76,6 @@ def _get_rolling_focus_and_baseline_periods():
 
 
 def _extract_dimensions(viz_meta):
-    """Extracts dx (including dataElementOperands), ou, and pe lists from DHIS2 visualization metadata."""
     dx_items = []
     for item in viz_meta.get("dataDimensionItems", []):
         if "dataElementOperand" in item:
@@ -105,7 +118,6 @@ def _extract_dimensions(viz_meta):
 
 
 def _period_to_quarter(period_str):
-    """Converts 'October 2025' -> 'Q4 2025' to match Cleaned_PV_Master.xlsx."""
     dt = pd.to_datetime(period_str, format="%B %Y", errors="coerce")
     if pd.isna(dt):
         return ""
@@ -113,82 +125,92 @@ def _period_to_quarter(period_str):
     return f"Q{q} {dt.year}"
 
 
-def fetch_and_adapt_khis_visualization(visualization_uid, target_period=None):
-    base_url = st.secrets["khis"]["url"]
-    username = st.secrets["khis"]["username"]
-    password = st.secrets["khis"]["password"]
+def fetch_and_adapt_khis_visualization(visualization_uid, target_period=None, timeout=15):
+    base_url, username, password = _get_khis_credentials()
+    if not base_url or not username or not password:
+        return pd.DataFrame()
 
     meta_url = f"{base_url}/api/visualizations/{visualization_uid}.json"
     meta_params = {
         "fields": "id,name,dataDimensionItems[dataDimensionItemType,dataElement[id],indicator[id],dataSet[id],programIndicator[id],dataElementOperand[id,dimensionItem]],organisationUnits[id],periods[id],relativePeriods,userOrganisationUnit,userOrganisationUnitChildren,userOrganisationUnitGrandChildren"
     }
 
-    meta_resp = requests.get(meta_url, params=meta_params, auth=(username, password), verify=False)
-    if meta_resp.status_code != 200:
-        st.error(f"Failed to fetch metadata for KHIS visualization {visualization_uid}. Status: {meta_resp.status_code}")
+    try:
+        meta_resp = requests.get(
+            meta_url,
+            params=meta_params,
+            auth=(username, password),
+            verify=False,
+            timeout=timeout,
+        )
+        if meta_resp.status_code != 200:
+            return pd.DataFrame()
+
+        dx_items, ou_items, pe_items = _extract_dimensions(meta_resp.json())
+
+        if target_period is None:
+            pe_items = _get_rolling_focus_and_baseline_periods()
+        else:
+            pe_items = [target_period] if isinstance(target_period, str) else list(target_period)
+
+        dimensions = []
+        if dx_items:
+            dimensions.append(f"dx:{";".join(dx_items)}")
+        if ou_items:
+            dimensions.append(f"ou:{";".join(ou_items)}")
+        if pe_items:
+            dimensions.append(f"pe:{";".join(pe_items)}")
+
+        analytics_url = f"{base_url}/api/analytics.json"
+        analytics_params = [
+            ("displayProperty", "NAME"),
+            ("skipMeta", "false"),
+            ("hierarchyMeta", "false"),
+        ] + [("dimension", d) for d in dimensions]
+
+        response = requests.get(
+            analytics_url,
+            params=analytics_params,
+            auth=(username, password),
+            verify=False,
+            timeout=timeout,
+        )
+        if response.status_code != 200:
+            return pd.DataFrame()
+
+        data = response.json()
+        headers = [h["name"] for h in data.get("headers", [])]
+        df_raw = pd.DataFrame(data.get("rows", []), columns=headers)
+
+        meta_items = data.get("metaData", {}).get("items", {})
+        for col in ("dx", "ou", "pe"):
+            if col in df_raw.columns:
+                df_raw[col] = df_raw[col].map(lambda uid: meta_items.get(uid, {}).get("name", uid))
+
+        df_raw = df_raw.rename(columns=COLUMN_RENAME_MAP)
+
+        if "facility_name" in df_raw.columns:
+            df_raw = df_raw[~df_raw["facility_name"].str.lower().str.contains("total|subtotal", na=False)]
+
+        if "value" in df_raw.columns:
+            df_raw["value"] = pd.to_numeric(df_raw["value"], errors="coerce").fillna(0)
+
+        return df_raw
+    except Exception:
         return pd.DataFrame()
 
-    dx_items, ou_items, pe_items = _extract_dimensions(meta_resp.json())
 
-    if target_period is None:
-        pe_items = _get_rolling_focus_and_baseline_periods()
-    else:
-        pe_items = [target_period] if isinstance(target_period, str) else list(target_period)
-
-    dimensions = []
-    if dx_items:
-        dimensions.append(f"dx:{';'.join(dx_items)}")
-    if ou_items:
-        dimensions.append(f"ou:{';'.join(ou_items)}")
-    if pe_items:
-        dimensions.append(f"pe:{';'.join(pe_items)}")
-
-    analytics_url = f"{base_url}/api/analytics.json"
-    analytics_params = [
-        ("displayProperty", "NAME"),
-        ("skipMeta", "false"),
-        ("hierarchyMeta", "false"),
-    ] + [("dimension", d) for d in dimensions]
-
-    response = requests.get(analytics_url, params=analytics_params, auth=(username, password), verify=False)
-    if response.status_code != 200:
-        st.error(f"Failed to fetch analytics for KHIS visualization {visualization_uid}. Status: {response.status_code}")
-        return pd.DataFrame()
-
-    data = response.json()
-    headers = [h["name"] for h in data.get("headers", [])]
-    df_raw = pd.DataFrame(data.get("rows", []), columns=headers)
-
-    meta_items = data.get("metaData", {}).get("items", {})
-    for col in ("dx", "ou", "pe"):
-        if col in df_raw.columns:
-            df_raw[col] = df_raw[col].map(lambda uid: meta_items.get(uid, {}).get("name", uid))
-
-    df_raw = df_raw.rename(columns=COLUMN_RENAME_MAP)
-
-    if "facility_name" in df_raw.columns:
-        df_raw = df_raw[~df_raw["facility_name"].str.lower().str.contains("total|subtotal", na=False)]
-
-    if "value" in df_raw.columns:
-        df_raw["value"] = pd.to_numeric(df_raw["value"], errors="coerce").fillna(0)
-
-    return df_raw
-
-
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_live_cleaned_dataset(pv_uid, kpi_uid, target_period=None):
-    df_pv_raw = fetch_and_adapt_khis_visualization(pv_uid, target_period=target_period)
-    df_kpi_raw = fetch_and_adapt_khis_visualization(kpi_uid, target_period=target_period)
-
+    df_pv_raw = fetch_and_adapt_khis_visualization(pv_uid, target_period=target_period, timeout=15)
+    df_kpi_raw = fetch_and_adapt_khis_visualization(kpi_uid, target_period=target_period, timeout=15)
     df_combined_raw = pd.concat([df_pv_raw, df_kpi_raw], ignore_index=True)
-    df_clean = _apply_dq_cleaning(df_combined_raw)
-
-    return df_clean
+    return _apply_dq_cleaning(df_combined_raw)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", target_period=None):
-    df_pv_raw = fetch_and_adapt_khis_visualization(pv_uid, target_period=target_period)
+    df_pv_raw = fetch_and_adapt_khis_visualization(pv_uid, target_period=target_period, timeout=15)
     df_pv_raw = _apply_dq_cleaning(df_pv_raw)
 
     if not df_pv_raw.empty:
@@ -199,10 +221,20 @@ def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", targ
         )
         df_pv_live["PV"] = df_pv_live["PV"].round().astype(int)
         df_pv_live["Quarter"] = df_pv_live["Period"].map(_period_to_quarter)
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            df_pv_live.to_csv(PV_SNAPSHOT_PATH, index=False, compression="gzip")
+        except Exception:
+            pass
+    elif os.path.exists(PV_SNAPSHOT_PATH):
+        try:
+            df_pv_live = pd.read_csv(PV_SNAPSHOT_PATH, compression="gzip")
+        except Exception:
+            df_pv_live = pd.DataFrame(columns=["organisationunitname", "Period", "PV", "Quarter"])
     else:
         df_pv_live = pd.DataFrame(columns=["organisationunitname", "Period", "PV", "Quarter"])
 
-    df_kpi_raw = fetch_and_adapt_khis_visualization(kpi_uid, target_period=target_period)
+    df_kpi_raw = fetch_and_adapt_khis_visualization(kpi_uid, target_period=target_period, timeout=15)
     df_kpi_raw = _apply_dq_cleaning(df_kpi_raw)
 
     if not df_kpi_raw.empty:
@@ -218,6 +250,16 @@ def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", targ
             .rename(columns={"facility_name": "organisationunitname"})
         )
         df_kpi_live_wide.columns.name = None
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            df_kpi_live_wide.to_csv(KPI_SNAPSHOT_PATH, index=False, compression="gzip")
+        except Exception:
+            pass
+    elif os.path.exists(KPI_SNAPSHOT_PATH):
+        try:
+            df_kpi_live_wide = pd.read_csv(KPI_SNAPSHOT_PATH, compression="gzip")
+        except Exception:
+            df_kpi_live_wide = pd.DataFrame(columns=["organisationunitname"])
     else:
         df_kpi_live_wide = pd.DataFrame(columns=["organisationunitname"])
 
