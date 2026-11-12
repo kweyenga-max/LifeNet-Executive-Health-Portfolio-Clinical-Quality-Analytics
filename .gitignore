@@ -10,3 +10,6 @@ __pycache__/
 project_backup_*/
 __pycache__/
 *.pyc
+
+_local_safety_backup/
+LifeNet-Executive-Health-Portfolio-Clinical-Quality-Analytics/
