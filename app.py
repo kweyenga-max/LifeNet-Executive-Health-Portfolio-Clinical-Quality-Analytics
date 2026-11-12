@@ -1040,6 +1040,19 @@ def load_all_data():
             df_issues["Year"] = df_issues["Year"].astype(str).str.strip()
             df_issues = pd.concat([df_issues, df_dyn_issues], ignore_index=True)
             df_issues = df_issues.drop_duplicates(subset=["Year", "Month", "Facility", "Issue Category"], keep="last")
+            # Drop stale static Excel DQA rows for any (Year, Month) already mirrored from KHIS
+            synced_ym = set()
+            for _df_yr, _yr_val in [(df_kpi_2025, 2025), (df_kpi_2026, 2026)]:
+                if _df_yr is not None and not _df_yr.empty:
+                    for _col in _df_yr.columns:
+                        for _m in ["January","February","March","April","May","June","July","August","September","October","November","December"]:
+                            if _col.endswith(f" {_m} {_yr_val}"):
+                                synced_ym.add((str(_yr_val), _m))
+            if synced_ym and "Year" in df_issues.columns and "Month" in df_issues.columns:
+                _in_synced = df_issues.apply(lambda r: (str(r["Year"]).strip(), str(r["Month"]).strip()) in synced_ym, axis=1)
+                df_issues = pd.concat([df_issues[~_in_synced], df_dyn_issues], ignore_index=True).drop_duplicates(
+                    subset=["Year", "Month", "Facility", "Issue Category"], keep="last"
+                )
         else:
             df_issues = df_dyn_issues
 

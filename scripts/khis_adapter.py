@@ -55,23 +55,13 @@ def _get_rolling_focus_and_baseline_periods():
     else:
         focus_year, focus_month = today.year, today.month - 1
 
-    last_year = focus_year - 1
-    periods = [f"{last_year}10", f"{last_year}11", f"{last_year}12"]
-
-    prior_same_month = f"{last_year}{focus_month:02d}"
-    if prior_same_month not in periods:
-        periods.append(prior_same_month)
-
-    if focus_month >= 10:
-        for m in range(10, focus_month + 1):
-            p = f"{focus_year}{m:02d}"
-            if p not in periods:
-                periods.append(p)
-    else:
-        p = f"{focus_year}{focus_month:02d}"
-        if p not in periods:
-            periods.append(p)
-
+    periods = []
+    # Full prior year (Jan-Dec) so any retroactive validation/correction is mirrored
+    for m in range(1, 13):
+        periods.append(f"{focus_year - 1}{m:02d}")
+    # Full year-to-date through latest completed month (e.g., Jan-Oct 2026, including July 2026)
+    for m in range(1, focus_month + 1):
+        periods.append(f"{focus_year}{m:02d}")
     return periods
 
 
@@ -230,9 +220,10 @@ def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", targ
         )
         df_pv_live["PV"] = df_pv_live["PV"].round().astype(int)
         df_pv_live["Quarter"] = df_pv_live["Period"].map(_period_to_quarter)
+        df_pv_live = df_pv_live.sort_values(["organisationunitname", "Period"]).reset_index(drop=True)
         try:
             os.makedirs(DATA_DIR, exist_ok=True)
-            df_pv_live.to_csv(PV_SNAPSHOT_PATH, index=False, compression="gzip")
+            df_pv_live.to_csv(PV_SNAPSHOT_PATH, index=False, compression={"method": "gzip", "mtime": 0})
         except Exception:
             pass
     elif os.path.exists(PV_SNAPSHOT_PATH):
@@ -259,9 +250,11 @@ def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", targ
             .rename(columns={"facility_name": "organisationunitname"})
         )
         df_kpi_live_wide.columns.name = None
+        other_cols = sorted([c for c in df_kpi_live_wide.columns if c != "organisationunitname"])
+        df_kpi_live_wide = df_kpi_live_wide[["organisationunitname"] + other_cols].sort_values("organisationunitname").reset_index(drop=True)
         try:
             os.makedirs(DATA_DIR, exist_ok=True)
-            df_kpi_live_wide.to_csv(KPI_SNAPSHOT_PATH, index=False, compression="gzip")
+            df_kpi_live_wide.to_csv(KPI_SNAPSHOT_PATH, index=False, compression={"method": "gzip", "mtime": 0})
         except Exception:
             pass
     elif os.path.exists(KPI_SNAPSHOT_PATH):
