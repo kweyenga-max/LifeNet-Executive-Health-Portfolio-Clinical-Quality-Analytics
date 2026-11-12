@@ -1217,7 +1217,7 @@ with st.sidebar:
     )
     time_frame_type = st.selectbox(
         "Granularity Level:",
-        ["Monthly", "Quarterly", "Biannual (H1/H2)", "Annual Summary"],
+        ["Monthly / Multi-Month", "Quarterly", "Biannual (H1/H2)", "Annual Summary"],
     )
 
     all_months = [
@@ -1235,12 +1235,23 @@ with st.sidebar:
         "December",
     ]
 
-    if time_frame_type == "Monthly":
-        selected_single_month = st.selectbox(
-            "Select Specific Month:", all_months, index=9
+    if time_frame_type == "Monthly / Multi-Month":
+        chosen_months = st.multiselect(
+            "Select One or More Months:",
+            options=all_months,
+            default=["October"],
+            help="Pick a single month or combine any custom months (e.g., Jan, Feb, Mar, Apr).",
         )
-        selected_period = f"{selected_single_month} ({focus_year})"
-        selected_months = [selected_single_month]
+        if not chosen_months:
+            st.warning("Select at least one month (defaulting to October).")
+            chosen_months = ["October"]
+        # Preserve calendar order regardless of click order
+        selected_months = [m for m in all_months if m in chosen_months]
+        if len(selected_months) == 1:
+            selected_period = f"{selected_months[0]} ({focus_year})"
+        else:
+            short_names = ", ".join(m[:3] for m in selected_months)
+            selected_period = f"{short_names} ({focus_year})" 
     elif time_frame_type == "Quarterly":
         selected_period = st.selectbox(
             "Select Quarter:", ["Q1", "Q2", "Q3", "Q4"], index=2
