@@ -1,7 +1,10 @@
 import os
 import numpy as np
 import pandas as pd
-from scipy import stats
+try:
+    from scipy import stats
+except ImportError:
+    stats = None
 from scripts.monitrac_adapter import _get_active_38_roster, _norm_key, _rolling_12_pe_codes, sync_monitrac_pss
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
