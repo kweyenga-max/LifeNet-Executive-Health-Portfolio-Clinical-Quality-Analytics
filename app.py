@@ -1,4 +1,5 @@
 import streamlit as st
+from scripts import pss_analytics as pssa
 st.cache_data.clear()
 import streamlit as st
 import pandas as pd
@@ -1301,6 +1302,7 @@ tabs = [
     "🚨 Data Quality Audits",
     "🔍 Facility Inspector",
     "💼 Financial Performance",
+    "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)",
     "📑 Monthly DDIU Brief",
 ]
 active_tab = st.radio("Nav", options=tabs, horizontal=True)
@@ -4423,6 +4425,91 @@ elif active_tab == "🔍 Facility Inspector":
                 f"ℹ️ No financial records found for **{selected_fac}** in the FY2026 finance dataset."
             )
 
+        # ---------------------------------------------------------------------
+        # PATIENT SATISFACTION SURVEY (PSS) SCORECARD & LONGITUDINAL TRAJECTORY (PAST 12 MONTHS)
+        # ---------------------------------------------------------------------
+        st.markdown("---")
+        pss_bundle_360 = pssa.get_pss_me_analytics(force_live=False)
+        win_lbl_360 = pss_bundle_360.get("window_label", "Past 12 Months")
+        st.markdown(
+            f"<h4 style='color:#0F172A; font-weight:800;'>😊 Patient Satisfaction Survey (PSS) Profile — {selected_fac} (Past 12 Months: {win_lbl_360})</h4>",
+            unsafe_allow_html=True,
+        )
+        if not pss_bundle_360.get("empty", True):
+            df_pss_360 = pss_bundle_360["df"]
+            fac_pss = df_pss_360[df_pss_360["organisationunitname"] == selected_fac].sort_values("periodid")
+            net_mean_360 = float(df_pss_360["Net_Satisfaction_Score"].mean())
+            if fac_pss.empty:
+                st.warning(
+                    f"⏳ **Unassessed in Past 12 Months ({win_lbl_360}):** **{selected_fac}** has no recorded Patient Satisfaction Survey in MoniTrac during this 12-month window. "
+                    "Recommend scheduling a baseline 25-point patient exit survey during the next Mentor/M&E support visit to eliminate patient-experience blind spots."
+                )
+            else:
+                ov_fac = float(fac_pss["Net_Satisfaction_Score"].mean())
+                mp6_fac = fac_pss[fac_pss["Half_Window"] == "Prior 6M"]["Net_Satisfaction_Score"].mean()
+                mr6_fac = fac_pss[fac_pss["Half_Window"] == "Recent 6M"]["Net_Satisfaction_Score"].mean()
+                latest_r = fac_pss.iloc[-1]
+                diff_vs_net = ov_fac - net_mean_360
+
+                kp1, kp2, kp3, kp4 = st.columns(4)
+                kp1.metric("Past 12M PSS Mean", f"{ov_fac:.1f}%", f"{diff_vs_net:+.1f} pp vs Network ({net_mean_360:.1f}%)")
+                kp2.metric("Latest Round Score", f"{float(latest_r['Net_Satisfaction_Score']):.1f}%", latest_r["periodname"])
+                kp3.metric("Recent 6M vs Prior 6M", f"{mr6_fac:.1f}%" if pd.notna(mr6_fac) else "No Recent 6M", f"Prior 6M: {mp6_fac:.1f}%" if pd.notna(mp6_fac) else "Recent 6M Entrant")
+                kp4.metric("12M Completed Rounds", f"{len(fac_pss)} Surveys", "Max Scale: 25.0 pts")
+
+                c_p1, c_p2 = st.columns([1.3, 1.0])
+                with c_p1:
+                    fig_fac_pss = go.Figure()
+                    fig_fac_pss.add_trace(
+                        go.Scatter(
+                            x=fac_pss["periodname"],
+                            y=fac_pss["Net_Satisfaction_Score"],
+                            mode="lines+markers+text",
+                            name=selected_fac,
+                            line=dict(color="#0A2540", width=3),
+                            marker=dict(size=10, color="#00A8CC", line=dict(color="#0A2540", width=1.5)),
+                            text=[f"{v:.1f}%" for v in fac_pss["Net_Satisfaction_Score"]],
+                            textposition="top center",
+                        )
+                    )
+                    fig_fac_pss.add_hline(y=80.0, line_dash="dash", line_color="#0D9488", annotation_text="80% Quality Target")
+                    fig_fac_pss.add_hline(y=net_mean_360, line_dash="dot", line_color="#64748B", annotation_text=f"12M Network Mean ({net_mean_360:.1f}%)")
+                    fig_fac_pss.update_layout(
+                        title=f"Past 12M Facility PSS Trajectory ({win_lbl_360})",
+                        yaxis=dict(range=[50, 108], title="Net Satisfaction (%)"),
+                        height=300,
+                        margin=dict(l=20, r=20, t=45, b=20),
+                        paper_bgcolor="#FFFFFF",
+                        plot_bgcolor="#FFFFFF",
+                    )
+                    st.plotly_chart(fig_fac_pss, use_container_width=True)
+                with c_p2:
+                    hist_cols = [c for c in ["periodname", "Half_Window", "Obtained_Points", "Max_Points", "Net_Satisfaction_Score"] if c in fac_pss.columns]
+                    st.dataframe(
+                        fac_pss[hist_cols].rename(columns={
+                            "periodname": "Period",
+                            "Half_Window": "6M Cohort",
+                            "Obtained_Points": "Obtained Pts",
+                            "Max_Points": "Max Pts",
+                            "Net_Satisfaction_Score": "Net Score (%)",
+                        }),
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+                    best_r = fac_pss.loc[fac_pss["Net_Satisfaction_Score"].idxmax()]
+                    worst_r = fac_pss.loc[fac_pss["Net_Satisfaction_Score"].idxmin()]
+                    trend_note = ""
+                    if len(fac_pss) >= 2:
+                        first_v = float(fac_pss.iloc[0]["Net_Satisfaction_Score"])
+                        last_v = float(fac_pss.iloc[-1]["Net_Satisfaction_Score"])
+                        net_chg = last_v - first_v
+                        direction = "improved" if net_chg >= 2 else ("declined" if net_chg <= -2 else "remained stable")
+                        trend_note = f" Across {len(fac_pss)} rounds, satisfaction **{direction} by {net_chg:+.1f} pp** ({fac_pss.iloc[0]['periodname']} -> {fac_pss.iloc[-1]['periodname']})."
+                    st.info(
+                        f"**M&E Facility Brief:** **{selected_fac}** averages **{ov_fac:.1f}%** (**{diff_vs_net:+.1f} pp** vs. the {net_mean_360:.1f}% network mean), "
+                        f"peaking at **{float(best_r['Net_Satisfaction_Score']):.1f}%** ({best_r['periodname']}) and dipping to **{float(worst_r['Net_Satisfaction_Score']):.1f}%** ({worst_r['periodname']}).{trend_note}"
+                    )
+
     else:
         st.warning("⚠️ No facility data found. Please verify dataset connections.")
 elif active_tab == "💼 Financial Performance":
@@ -4917,3 +5004,236 @@ elif active_tab == "📑 Monthly DDIU Brief":
                 hide_index=True,
                 use_container_width=True,
             )
+
+
+# ---------------------------------------------------------
+# TAB: LIFENET PARTNER FACILITY PATIENT SATISFACTION SURVEY (PSS)
+# ---------------------------------------------------------
+elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)":
+    pss_data = pssa.get_pss_me_analytics(force_live=False)
+    win_lbl = pss_data.get("window_label", "Past 12 Months")
+    st.markdown(
+        f"<h2 style='color:#0F172A; font-weight:800;'>😊 LifeNet Partner Facility Patient Satisfaction Survey (PSS) — Past 12 Months ({win_lbl})</h2>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Live MoniTrac DHIS2 Rolling 12-Month Interoperability Layer (`pe:LAST_12_MONTHS`) | Strictly scoped to LifeNet Kenya's 38 Partner Facilities"
+    )
+
+    if pss_data.get("empty", True):
+        st.warning("⚠️ No PSS records available in the past 12 months. Run `./sync_khis.sh` to pull live MoniTrac PSS data.")
+    else:
+        insights = pssa.generate_pss_chart_insights(pss_data)
+        df_pss = pss_data["df"]
+        s_p6 = pss_data["s_prior6"]
+        s_r6 = pss_data["s_recent6"]
+        m_spc = pss_data["m_spc"]
+        cohort_df = pss_data["cohort_df"]
+        pending_df = pss_data["pending_df"]
+        fac_summary_df = pss_data["fac_summary_df"]
+
+        # Top Executive M&E KPI Strip
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric(
+            "Past 12M Network Mean",
+            f"{df_pss['Net_Satisfaction_Score'].mean():.2f}%",
+            f"Median: {df_pss['Net_Satisfaction_Score'].median():.2f}% (n={len(df_pss)})",
+        )
+        k2.metric(
+            f"Recent 6M Mean (n={len(s_r6)})",
+            f"{s_r6.mean():.2f}%" if len(s_r6) else "N/A",
+            f"{(s_r6.mean() - s_p6.mean()):+.2f} pp vs Prior 6M (p={pss_data['p_val_t']:.2f})" if len(s_p6) and len(s_r6) else "",
+        )
+        k3.metric(
+            f"Prior 6M Mean (n={len(s_p6)})",
+            f"{s_p6.mean():.2f}%" if len(s_p6) else "N/A",
+            f"IQR: {(s_p6.quantile(0.75) - s_p6.quantile(0.25)):.1f} pp" if len(s_p6) else "",
+        )
+        k4.metric(
+            "12M Surveillance Reach",
+            f"{pss_data['assessed_count']} / 38 Sites",
+            f"{(pss_data['assessed_count']/38*100):.1f}% Assessed in 12M",
+        )
+        k5.metric(
+            "Unassessed in Past 12M",
+            f"{pss_data['never_count']} Facilities",
+            f"+ {pss_data['only_p6_count']} Due for 6M Follow-Up",
+            delta_color="inverse",
+        )
+
+        st.markdown("---")
+
+        # ROW 1: Violin + Boxplot Distribution & Longitudinal Paired Cohort Slopegraph
+        col_g1, col_g2 = st.columns(2)
+
+        with col_g1:
+            st.markdown("#### A. Score Density, IQR & Semi-Annual Shift (Prior 6M vs. Recent 6M)")
+            fig_violin = go.Figure()
+            for lbl_6m, s_vals, col_hex in [
+                (pss_data["first_6m_label"], s_p6, "#0A2540"),
+                (pss_data["recent_6m_label"], s_r6, "#00A8CC"),
+            ]:
+                if len(s_vals) > 0:
+                    fig_violin.add_trace(
+                        go.Violin(
+                            y=s_vals,
+                            name=f"{lbl_6m} (n={len(s_vals)})",
+                            box_visible=True,
+                            meanline_visible=True,
+                            points="all",
+                            jitter=0.25,
+                            pointpos=-1.4,
+                            fillcolor=col_hex,
+                            opacity=0.65,
+                            line_color=col_hex,
+                        )
+                    )
+            fig_violin.add_hline(y=80.0, line_dash="dash", line_color="#0D9488", annotation_text="80% Quality Benchmark")
+            fig_violin.update_layout(
+                height=390,
+                yaxis=dict(title="Net Satisfaction Score (%)", range=[55, 106], gridcolor="#E2E8F0"),
+                paper_bgcolor="#FFFFFF",
+                plot_bgcolor="#FFFFFF",
+                margin=dict(l=20, r=20, t=30, b=20),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_violin, use_container_width=True)
+            st.info(insights["chart_a"])
+
+        with col_g2:
+            st.markdown(f"#### B. Intra-Year Paired Trajectory (n={pss_data['both_count']} Sites Assessed in Both Halves)")
+            fig_slope = go.Figure()
+            if not cohort_df.empty:
+                for _, r in cohort_df.iterrows():
+                    line_col = "#0D9488" if r["Delta"] >= 2.0 else ("#DC2626" if r["Delta"] <= -2.0 else "#64748B")
+                    fig_slope.add_trace(
+                        go.Scatter(
+                            x=["Prior 6M Mean", "Recent 6M Mean"],
+                            y=[r["Prior_6M_Mean"], r["Recent_6M_Mean"]],
+                            mode="lines+markers",
+                            name=f"{r['Facility']} ({r['Delta']:+.1f}%)",
+                            line=dict(color=line_col, width=2.4 if abs(r["Delta"]) >= 4 else 1.4),
+                            marker=dict(size=8, color=line_col),
+                            hovertemplate=f"<b>{r['Facility']}</b><br>Prior 6M: {r['Prior_6M_Mean']:.1f}%<br>Recent 6M: {r['Recent_6M_Mean']:.1f}%<br>Delta: {r['Delta']:+.1f} pp<extra></extra>",
+                        )
+                    )
+            fig_slope.add_hline(y=80.0, line_dash="dot", line_color="#94A3B8", annotation_text="80% Target")
+            fig_slope.update_layout(
+                height=390,
+                yaxis=dict(title="Facility Mean Score (%)", range=[58, 103], gridcolor="#E2E8F0"),
+                paper_bgcolor="#FFFFFF",
+                plot_bgcolor="#FFFFFF",
+                margin=dict(l=20, r=20, t=30, b=20),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_slope, use_container_width=True)
+            st.info(insights["chart_b"])
+
+        # ROW 2: Network Surveillance Coverage Donut & Monthly SPC Control Chart
+        col_g3, col_g4 = st.columns([0.95, 1.25])
+
+        with col_g3:
+            st.markdown("#### C. 12-Month Surveillance Coverage (38 Facilities)")
+            fig_donut = go.Figure(
+                data=[
+                    go.Pie(
+                        labels=[
+                            f"Both 6M Halves ({pss_data['both_count']})",
+                            f"Recent 6M Only ({pss_data['only_r6_count']})",
+                            f"Prior 6M Only ({pss_data['only_p6_count']})",
+                            f"Unassessed in 12M ({pss_data['never_count']})",
+                        ],
+                        values=[
+                            pss_data["both_count"],
+                            pss_data["only_r6_count"],
+                            pss_data["only_p6_count"],
+                            pss_data["never_count"],
+                        ],
+                        hole=0.52,
+                        marker=dict(colors=["#0D9488", "#00A8CC", "#D97706", "#DC2626"]),
+                        textinfo="label+percent",
+                        textposition="outside",
+                    )
+                ]
+            )
+            fig_donut.update_layout(
+                height=370,
+                margin=dict(l=20, r=20, t=30, b=20),
+                paper_bgcolor="#FFFFFF",
+                showlegend=False,
+                annotations=[dict(text="38<br>Partner<br>Sites", x=0.5, y=0.5, font_size=15, showarrow=False)],
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+            st.info(insights["chart_c"])
+
+        with col_g4:
+            st.markdown(f"#### D. Monthly Statistical Process Control (SPC ±1 SD Band — {win_lbl})")
+            fig_spc = go.Figure()
+            fig_spc.add_trace(
+                go.Scatter(
+                    x=list(m_spc["periodname"]) + list(m_spc["periodname"])[::-1],
+                    y=list(m_spc["Upper_1SD"]) + list(m_spc["Lower_1SD"])[::-1],
+                    fill="toself",
+                    fillcolor="rgba(0, 168, 204, 0.16)",
+                    line=dict(color="rgba(255,255,255,0)"),
+                    name="±1 SD Dispersion Band",
+                    hoverinfo="skip",
+                )
+            )
+            fig_spc.add_trace(
+                go.Scatter(
+                    x=m_spc["periodname"],
+                    y=m_spc["Mean"],
+                    mode="lines+markers+text",
+                    name="Monthly Mean (%)",
+                    line=dict(color="#0A2540", width=3),
+                    marker=dict(size=9, color="#0A2540"),
+                    text=[f"{m:.1f}% (n={n})" for m, n in zip(m_spc["Mean"], m_spc["Surveys"])],
+                    textposition="top center",
+                )
+            )
+            fig_spc.add_trace(
+                go.Scatter(
+                    x=m_spc["periodname"],
+                    y=m_spc["Median"],
+                    mode="lines+markers",
+                    name="Monthly Median (%)",
+                    line=dict(color="#0D9488", width=2, dash="dash"),
+                    marker=dict(size=7, symbol="square"),
+                )
+            )
+            fig_spc.add_hline(y=80.0, line_dash="dot", line_color="#DC2626", annotation_text="80% Quality Floor")
+            fig_spc.update_layout(
+                height=370,
+                yaxis=dict(title="Net Satisfaction Score (%)", range=[55, 106], gridcolor="#E2E8F0"),
+                paper_bgcolor="#FFFFFF",
+                plot_bgcolor="#FFFFFF",
+                margin=dict(l=20, r=20, t=30, b=20),
+                legend=dict(orientation="h", y=1.12),
+            )
+            st.plotly_chart(fig_spc, use_container_width=True)
+            st.info(insights["chart_d"])
+
+        st.markdown("---")
+        st.markdown(insights["exec_summary"])
+        st.markdown("---")
+
+        # ROW 3: Actionable Registers (Risk-Prioritized Unassessed & Overdue Register + Complete 38-Facility Directory)
+        tab_sub1, tab_sub2, tab_sub3 = st.tabs([
+            f"⏳ Unassessed & Overdue Decision Register ({len(pending_df)} Sites)",
+            "🏥 Complete 38-Facility 12M PSS Directory",
+            "📈 Paired 6M Trajectory Table",
+        ])
+
+        with tab_sub1:
+            st.markdown(f"##### Risk-Prioritized Facilities With Zero PSS in Past 12 Months or Due for 6M Follow-Up ({win_lbl})")
+            st.caption("Ranked by Priority Tier (P1 = High-Volume Blind Spots & Sub-75% Follow-Ups) and 12-Month Outpatient Volume so Mentor & M&E teams deploy where patient exposure is highest.")
+            st.dataframe(pending_df, hide_index=True, use_container_width=True)
+
+        with tab_sub2:
+            st.markdown(f"##### Master Past-12-Month PSS Performance Directory (All 38 LifeNet Kenya Facilities)")
+            st.dataframe(fac_summary_df, hide_index=True, use_container_width=True)
+
+        with tab_sub3:
+            st.markdown("##### Paired Semi-Annual Trajectory (Facilities Assessed in Both Prior 6M & Recent 6M)")
+            st.dataframe(cohort_df, hide_index=True, use_container_width=True)
