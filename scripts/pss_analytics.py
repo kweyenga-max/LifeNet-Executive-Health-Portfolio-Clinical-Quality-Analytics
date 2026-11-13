@@ -143,7 +143,7 @@ def get_pss_me_analytics(force_live=False):
             "Priority_Tier": tier,
             "Facility": fac,
             "12M_Surveillance_Status": "Zero PSS in Past 12 Months",
-            "12M_Outpatient_PV": fac_pv if fac_pv > 0 else np.nan,
+            "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
             "Last_Survey_in_12M": "None",
             "Last_Score_%": np.nan,
             "Decision_Action": action,
@@ -163,12 +163,14 @@ def get_pss_me_analytics(force_live=False):
             "Priority_Tier": tier,
             "Facility": fac,
             "12M_Surveillance_Status": "Assessed in Prior 6M Only (>6M Ago)",
-            "12M_Outpatient_PV": fac_pv if fac_pv > 0 else np.nan,
+            "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
             "Last_Survey_in_12M": last_r["periodname"],
             "Last_Score_%": round(last_sc, 2),
             "Decision_Action": action,
         })
     pending_df = pd.DataFrame(pending_rows)
+    if not pending_df.empty and "12M_Outpatient_PV" in pending_df.columns:
+        pending_df["12M_Outpatient_PV"] = pending_df["12M_Outpatient_PV"].astype("Int64")
     if not pending_df.empty:
         pending_df = pending_df.sort_values(
             by=["Priority_Tier", "12M_Outpatient_PV", "Facility"],
@@ -186,7 +188,7 @@ def get_pss_me_analytics(force_live=False):
                 "Facility": fac,
                 "12M_Status": "Pending 12M Assessment",
                 "12M_Rounds": 0,
-                "12M_Outpatient_PV": fac_pv if fac_pv > 0 else np.nan,
+                "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
                 "Prior_6M_Mean_%": np.nan,
                 "Recent_6M_Mean_%": np.nan,
                 "12M_Mean_%": np.nan,
@@ -206,14 +208,17 @@ def get_pss_me_analytics(force_live=False):
                 "Facility": fac,
                 "12M_Status": tier,
                 "12M_Rounds": int(len(sub)),
-                "12M_Outpatient_PV": fac_pv if fac_pv > 0 else np.nan,
+                "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
                 "Prior_6M_Mean_%": round(mp6, 2) if pd.notna(mp6) else np.nan,
                 "Recent_6M_Mean_%": round(mr6, 2) if pd.notna(mr6) else np.nan,
                 "12M_Mean_%": round(ov, 2),
                 "Latest_Period": latest["periodname"],
                 "Latest_Score_%": round(float(latest["Net_Satisfaction_Score"]), 2),
             })
-    fac_summary_df = pd.DataFrame(fac_summary_rows).sort_values(
+    fac_summary_df = pd.DataFrame(fac_summary_rows)
+    if not fac_summary_df.empty and "12M_Outpatient_PV" in fac_summary_df.columns:
+        fac_summary_df["12M_Outpatient_PV"] = fac_summary_df["12M_Outpatient_PV"].astype("Int64")
+    fac_summary_df = fac_summary_df.sort_values(
         by=["12M_Mean_%", "Facility"], ascending=[False, True], na_position="last"
     )
 

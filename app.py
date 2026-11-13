@@ -5157,9 +5157,10 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
                     )
                 ]
             )
+            fig_donut.update_traces(pull=[0.02, 0.02, 0.02, 0.04], automargin=True)
             fig_donut.update_layout(
-                height=370,
-                margin=dict(l=20, r=20, t=30, b=20),
+                height=390,
+                margin=dict(l=45, r=45, t=45, b=55),
                 paper_bgcolor="#FFFFFF",
                 showlegend=False,
                 annotations=[dict(text="<b>38</b><br>Partner<br>Sites", x=0.5, y=0.5, font=dict(size=15, color="#0F172A"), showarrow=False)],
@@ -5227,8 +5228,17 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
         ])
 
         def _light_table(df_in):
+            fmt_map = {}
+            if "12M_Outpatient_PV" in df_in.columns:
+                fmt_map["12M_Outpatient_PV"] = lambda v: f"{int(v):,}" if pd.notna(v) else "—"
+            for sc_col in ["Last_Score_%", "Prior_6M_Mean_%", "Recent_6M_Mean_%", "12M_Mean_%", "Latest_Score_%", "Prior_6M_Mean", "Recent_6M_Mean"]:
+                if sc_col in df_in.columns:
+                    fmt_map[sc_col] = lambda v: f"{float(v):.1f}%" if pd.notna(v) else "—"
+            if "Delta" in df_in.columns:
+                fmt_map["Delta"] = lambda v: f"{float(v):+.1f} pp" if pd.notna(v) else "—"
             return (
                 df_in.style
+                .format(fmt_map)
                 .set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
                 .set_table_styles([{"selector": "th", "props": [("background-color", "#F1F5F9"), ("color", "#0F172A"), ("font-weight", "700")]}])
             )
