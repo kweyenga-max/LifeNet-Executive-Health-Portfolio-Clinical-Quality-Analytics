@@ -5009,6 +5009,30 @@ elif active_tab == "📑 Monthly DDIU Brief":
 # ---------------------------------------------------------
 # TAB: LIFENET PARTNER FACILITY PATIENT SATISFACTION SURVEY (PSS)
 # ---------------------------------------------------------
+    st.markdown("---")
+    st.markdown(f"#### 😊 Patient Satisfaction Survey (PSS) & Unassessed Facility Reminder ({ddiu_data['pss_window']})")
+    ps1, ps2, ps3, ps4 = st.columns(4)
+    ps1.metric("Rolling 12M PSS Mean", f"{ddiu_data['pss_mean']:.1f}%", f"Median: {ddiu_data['pss_median']:.1f}%")
+    ps2.metric("12M Assessed Facilities", f"{ddiu_data['pss_assessed']} / 38", f"{(ddiu_data['pss_assessed']/38*100):.1f}% Coverage")
+    ps3.metric("Unassessed Reminder (0 PSS)", f"{ddiu_data['pss_unassessed']} Sites", "Action: Schedule Baseline PSS", delta_color="inverse")
+    ps4.metric("Sub-75% QI Escalations", f"{len(ddiu_data['pss_low_facs'])} Sites", ", ".join(ddiu_data["pss_low_facs"][:2]) if ddiu_data["pss_low_facs"] else "All >= 75%")
+
+    pss_pend_ui = ddiu_data.get("pss_pending_df", pd.DataFrame())
+    if not pss_pend_ui.empty:
+        st.caption("Priority deployment reminder for M&E and Field Mentors — facilities with zero PSS in the past 12 months or overdue for 6-month follow-up (included in the downloadable PDF report above):")
+        fmt_ddiu_pss = {}
+        if "12M_Outpatient_PV" in pss_pend_ui.columns:
+            fmt_ddiu_pss["12M_Outpatient_PV"] = lambda v: f"{int(v):,}" if pd.notna(v) else "—"
+        if "Last_Score_%" in pss_pend_ui.columns:
+            fmt_ddiu_pss["Last_Score_%"] = lambda v: f"{float(v):.1f}%" if pd.notna(v) else "—"
+        styled_ddiu_pss = (
+            pss_pend_ui.style
+            .format(fmt_ddiu_pss)
+            .set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
+            .set_table_styles([{"selector": "th", "props": [("background-color", "#F1F5F9"), ("color": "#0F172A"), ("font-weight", "700")]}])
+        )
+        st.dataframe(styled_ddiu_pss, hide_index=True, use_container_width=True)
+
 elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)":
     pss_data = pssa.get_pss_me_analytics(force_live=False)
     win_lbl = pss_data.get("window_label", "Past 12 Months")

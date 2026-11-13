@@ -24,6 +24,7 @@ from reportlab.platypus import (
 )
 
 from scripts import finance_analytics as fa
+from scripts import pss_analytics as pssa
 
 # LifeNet International Executive Color Palette
 LN_NAVY = "#0A2540"
@@ -370,7 +371,52 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
             "Action Required": "Investigate root causes of >25% MoM attendance drop (drug stockouts, staffing gaps, or outreach schedule).",
         })
 
+    # Rolling 12-Month Patient Satisfaction Survey (PSS) Integration
+    pss_bundle = pssa.get_pss_me_analytics(force_live=False)
+    pss_mean = 0.0
+    pss_median = 0.0
+    pss_assessed = 0
+    pss_unassessed = 0
+    pss_window = "Past 12 Months"
+    pss_pending_df = pd.DataFrame()
+    pss_low_facs = []
+    if not pss_bundle.get("empty", True):
+        df_pss_all = pss_bundle["df"]
+        pss_mean = float(df_pss_all["Net_Satisfaction_Score"].mean())
+        pss_median = float(df_pss_all["Net_Satisfaction_Score"].median())
+        pss_assessed = int(pss_bundle["assessed_count"])
+        pss_unassessed = int(pss_bundle["never_count"])
+        pss_window = pss_bundle["window_label"]
+        pss_pending_df = pss_bundle["pending_df"].copy()
+        fac_pss_sum = pss_bundle["fac_summary_df"]
+        pss_low_facs = fac_pss_sum[(fac_pss_sum["12M_Rounds"] > 0) & (fac_pss_sum["12M_Mean_%"] < 75.0)]["Facility"].tolist()
+
+        if pss_low_facs:
+            action_items.append({
+                "Owner": "Medical & Mgmt Mentors",
+                "Priority": "High",
+                "Focus Area": "Patient Satisfaction (<75% Alert)",
+                "Facilities": ", ".join(pss_low_facs[:6]),
+                "Action Required": "Conduct patient-experience root-cause review (wait times, stockouts, staff communication) and coach clinic teams.",
+            })
+        unassessed_only = pss_pending_df[pss_pending_df["12M_Surveillance_Status"] == "Zero PSS in Past 12 Months"]["Facility"].tolist() if not pss_pending_df.empty else []
+        if unassessed_only:
+            action_items.append({
+                "Owner": "M&E & Field Mentors",
+                "Priority": "High",
+                "Focus Area": f"Unassessed PSS Reminder ({len(unassessed_only)} Sites)",
+                "Facilities": ", ".join(unassessed_only[:6]) + (f" (+{len(unassessed_only)-6} more)" if len(unassessed_only) > 6 else ""),
+                "Action Required": f"Administer 25-point Patient Satisfaction Survey at unassessed partner facilities (0 surveys in {pss_window}).",
+            })
+
     return {
+        "pss_mean": pss_mean,
+        "pss_median": pss_median,
+        "pss_assessed": pss_assessed,
+        "pss_unassessed": pss_unassessed,
+        "pss_window": pss_window,
+        "pss_pending_df": pss_pending_df,
+        "pss_low_facs": pss_low_facs,
         "period": period_label,
         "prev_period": prev_label,
         "yoy_period": yoy_label,
@@ -710,7 +756,44 @@ def generate_ddiu_pdf_bytes(period_label: str, base_dir: Path | None = None) -> 
 
     story.append(Spacer(1, 10))
 
-    story.append(Paragraph("5. DDIU Action Plan — M&amp;E and Field Mentorship Deliverables", s_sec))
+    story.append(Paragraph(f"5. Patient Satisfaction Survey (PSS) &amp; Unassessed Facility Reminder ({data['pss_window']})", s_sec))
+    story.append(HRFlowable(width="100%", thickness=1, color=c_teal, spaceAfter=6))
+    low_txt = f"Sub-75% QI escalations: <b>{', '.join(data['pss_low_facs'])}</b>." if data["pss_low_facs"] else "All assessed sites currently average >= 75.0%."
+    story.append(Paragraph(
+        f"Across the rolling 12-month window (<b>{data['pss_window']}</b>), network patient satisfaction averages "
+        f"<b>{data['pss_mean']:.1f}%</b> (Median: <b>{data['pss_median']:.1f}%</b>) across <b>{data['pss_assessed']}/38 assessed facilities</b>. "
+        f"<b>{data['pss_unassessed']} facilities have zero recorded PSS rounds</b> and require scheduled baseline exit surveys. {low_txt}",
+        s_body,
+    ))
+    pss_pend = data.get("pss_pending_df", pd.DataFrame())
+    if not pss_pend.empty:
+        pss_rows = [[
+            Paragraph("Priority Tier", s_cell_hdr),
+            Paragraph("Facility Name", s_cell_hdr),
+            Paragraph("12M PSS Status", s_cell_hdr),
+            Paragraph("12M OPD PV", s_cell_hdr),
+            Paragraph("Recommended Mentor / M&amp;E Action", s_cell_hdr),
+        ]]
+        for _, r in pss_pend.head(18).iterrows():
+            pv_txt = f"{int(r['12M_Outpatient_PV']):,}" if pd.notna(r["12M_Outpatient_PV"]) else "—"
+            pss_rows.append([
+                Paragraph(f"<b>{r['Priority_Tier']}</b>", s_cell),
+                Paragraph(f"<b>{r['Facility']}</b>", s_cell),
+                Paragraph(str(r["12M_Surveillance_Status"]), s_cell),
+                Paragraph(pv_txt, s_cell),
+                Paragraph(str(r["Decision_Action"]), s_cell),
+            ])
+        pt = Table(pss_rows, colWidths=[1.35 * inch, 1.75 * inch, 1.25 * inch, 0.75 * inch, 2.05 * inch])
+        pt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), c_teal),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, c_light]),
+            ("GRID", (0, 0), (-1, -1), 0.5, c_border),
+            ("PADDING", (0, 0), (-1, -1), 4.5),
+        ]))
+        story.append(pt)
+        story.append(Spacer(1, 8))
+
+    story.append(Paragraph("6. DDIU Action Plan — M&amp;E and Field Mentorship Deliverables", s_sec))
     story.append(HRFlowable(width="100%", thickness=1, color=c_crimson, spaceAfter=6))
     act = data["action_df"]
     if not act.empty:
