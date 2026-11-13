@@ -389,7 +389,7 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
         pss_window = pss_bundle["window_label"]
         pss_pending_df = pss_bundle["pending_df"].copy()
         fac_pss_sum = pss_bundle["fac_summary_df"]
-        pss_low_facs = fac_pss_sum[(fac_pss_sum["12M_Rounds"] > 0) & (fac_pss_sum["12M_Mean_%"] < 75.0)]["Facility"].tolist()
+        pss_low_facs = fac_pss_sum[(fac_pss_sum["12M_Rounds"] > 0) & (fac_pss_sum["12M_Net_Patient_Satisfaction_%"] < 75.0)]["Facility"].tolist()
 
         if pss_low_facs:
             action_items.append({
