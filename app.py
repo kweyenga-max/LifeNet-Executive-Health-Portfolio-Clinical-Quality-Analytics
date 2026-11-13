@@ -4452,10 +4452,10 @@ elif active_tab == "🔍 Facility Inspector":
                 diff_vs_net = ov_fac - net_mean_360
 
                 kp1, kp2, kp3, kp4 = st.columns(4)
-                kp1.metric("Past 12M PSS Mean", f"{ov_fac:.1f}%", f"{diff_vs_net:+.1f} pp vs Network ({net_mean_360:.1f}%)")
-                kp2.metric("Latest Round Score", f"{float(latest_r['Net_Satisfaction_Score']):.1f}%", latest_r["periodname"])
+                kp1.metric("Net Patient Satisfaction (12M Mean)", f"{ov_fac:.1f}%", f"{diff_vs_net:+.1f} pp vs Network ({net_mean_360:.1f}%)")
+                kp2.metric("Latest Net Patient Satisfaction", f"{float(latest_r['Net_Satisfaction_Score']):.1f}%", latest_r["periodname"])
                 kp3.metric("Recent 6M vs Prior 6M", f"{mr6_fac:.1f}%" if pd.notna(mr6_fac) else "No Recent 6M", f"Prior 6M: {mp6_fac:.1f}%" if pd.notna(mp6_fac) else "Recent 6M Entrant")
-                kp4.metric("12M Completed Rounds", f"{len(fac_pss)} Surveys", "Max Scale: 25.0 pts")
+                kp4.metric("12M Completed PSS Rounds", f"{len(fac_pss)} Surveys", "MoniTrac Element: Net Patient Satisfaction")
 
                 c_p1, c_p2 = st.columns([1.3, 1.0])
                 with c_p1:
@@ -4466,36 +4466,77 @@ elif active_tab == "🔍 Facility Inspector":
                             y=fac_pss["Net_Satisfaction_Score"],
                             mode="lines+markers+text",
                             name=selected_fac,
-                            line=dict(color="#0A2540", width=3),
-                            marker=dict(size=10, color="#00A8CC", line=dict(color="#0A2540", width=1.5)),
-                            text=[f"{v:.1f}%" for v in fac_pss["Net_Satisfaction_Score"]],
+                            line=dict(color="#0A2540", width=3.5),
+                            marker=dict(size=14, color="#00A8CC", line=dict(color="#0A2540", width=2.5)),
+                            text=[f"<b>{v:.1f}%</b>" for v in fac_pss["Net_Satisfaction_Score"]],
                             textposition="top center",
+                            textfont=dict(color="#0F172A", size=13, family="sans-serif"),
                         )
                     )
-                    fig_fac_pss.add_hline(y=80.0, line_dash="dash", line_color="#0D9488", annotation_text="80% Quality Target")
-                    fig_fac_pss.add_hline(y=net_mean_360, line_dash="dot", line_color="#64748B", annotation_text=f"12M Network Mean ({net_mean_360:.1f}%)")
+                    fig_fac_pss.add_hline(
+                        y=80.0,
+                        line_dash="dash",
+                        line_width=2,
+                        line_color="#0D9488",
+                        annotation_text="<b>80% Quality Target</b>",
+                        annotation_position="bottom right",
+                        annotation_font=dict(color="#0F766E", size=11),
+                    )
+                    fig_fac_pss.add_hline(
+                        y=net_mean_360,
+                        line_dash="dot",
+                        line_width=2,
+                        line_color="#334155",
+                        annotation_text=f"<b>12M Network Mean ({net_mean_360:.1f}%)</b>",
+                        annotation_position="top right",
+                        annotation_font=dict(color="#1E293B", size=11),
+                    )
                     fig_fac_pss.update_layout(
-                        title=f"Past 12M Facility PSS Trajectory ({win_lbl_360})",
-                        yaxis=dict(range=[50, 108], title="Net Satisfaction (%)"),
-                        height=300,
-                        margin=dict(l=20, r=20, t=45, b=20),
+                        title=dict(
+                            text=f"<b>Net Patient Satisfaction Trajectory — Past 12M ({win_lbl_360})</b>",
+                            font=dict(color="#0F172A", size=14),
+                        ),
+                        font=dict(color="#0F172A", size=12),
+                        xaxis=dict(
+                            title=dict(text="Reporting Period", font=dict(color="#0F172A", size=12)),
+                            tickfont=dict(color="#0F172A", size=12),
+                            showline=True,
+                            linecolor="#CBD5E1",
+                        ),
+                        yaxis=dict(
+                            range=[50, 108],
+                            title=dict(text="Net Patient Satisfaction (%)", font=dict(color="#0F172A", size=12)),
+                            tickfont=dict(color="#0F172A", size=12),
+                            gridcolor="#E2E8F0",
+                            showline=True,
+                            linecolor="#CBD5E1",
+                        ),
+                        height=320,
+                        margin=dict(l=45, r=25, t=50, b=40),
                         paper_bgcolor="#FFFFFF",
-                        plot_bgcolor="#FFFFFF",
+                        plot_bgcolor="#F8FAFC",
+                        showlegend=False,
                     )
                     st.plotly_chart(fig_fac_pss, use_container_width=True)
                 with c_p2:
-                    hist_cols = [c for c in ["periodname", "Half_Window", "Obtained_Points", "Max_Points", "Net_Satisfaction_Score"] if c in fac_pss.columns]
-                    st.dataframe(
-                        fac_pss[hist_cols].rename(columns={
-                            "periodname": "Period",
-                            "Half_Window": "6M Cohort",
-                            "Obtained_Points": "Obtained Pts",
-                            "Max_Points": "Max Pts",
-                            "Net_Satisfaction_Score": "Net Score (%)",
-                        }),
-                        hide_index=True,
-                        use_container_width=True,
+                    hist_cols = ["periodname", "Half_Window"]
+                    for opt_c in ["Obtained_Points", "Max_Points"]:
+                        if opt_c in fac_pss.columns and fac_pss[opt_c].notna().any():
+                            hist_cols.append(opt_c)
+                    hist_cols.append("Net_Satisfaction_Score")
+                    disp_hist = fac_pss[hist_cols].rename(columns={
+                        "periodname": "Period",
+                        "Half_Window": "6M Cohort",
+                        "Obtained_Points": "Obtained Points",
+                        "Max_Points": "Max Points",
+                        "Net_Satisfaction_Score": "Net Patient Satisfaction (%)",
+                    })
+                    styled_hist = (
+                        disp_hist.style
+                        .format({"Net Patient Satisfaction (%)": "{:.1f}%"})
+                        .set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
                     )
+                    st.dataframe(styled_hist, hide_index=True, use_container_width=True)
                     best_r = fac_pss.loc[fac_pss["Net_Satisfaction_Score"].idxmax()]
                     worst_r = fac_pss.loc[fac_pss["Net_Satisfaction_Score"].idxmin()]
                     trend_note = ""
@@ -5012,7 +5053,7 @@ elif active_tab == "📑 Monthly DDIU Brief":
     st.markdown("---")
     st.markdown(f"#### 😊 Patient Satisfaction Survey (PSS) & Unassessed Facility Reminder ({ddiu_data['pss_window']})")
     ps1, ps2, ps3, ps4 = st.columns(4)
-    ps1.metric("Rolling 12M PSS Mean", f"{ddiu_data['pss_mean']:.1f}%", f"Median: {ddiu_data['pss_median']:.1f}%")
+    ps1.metric("Net Patient Satisfaction (12M Mean)", f"{ddiu_data['pss_mean']:.1f}%", f"Median: {ddiu_data['pss_median']:.1f}%")
     ps2.metric("12M Assessed Facilities", f"{ddiu_data['pss_assessed']} / 38", f"{(ddiu_data['pss_assessed']/38*100):.1f}% Coverage")
     ps3.metric("Unassessed Reminder (0 PSS)", f"{ddiu_data['pss_unassessed']} Sites", "Action: Schedule Baseline PSS", delta_color="inverse")
     ps4.metric("Sub-75% QI Escalations", f"{len(ddiu_data['pss_low_facs'])} Sites", ", ".join(ddiu_data["pss_low_facs"][:2]) if ddiu_data["pss_low_facs"] else "All >= 75%")
@@ -5023,8 +5064,8 @@ elif active_tab == "📑 Monthly DDIU Brief":
         fmt_ddiu_pss = {}
         if "12M_Outpatient_PV" in pss_pend_ui.columns:
             fmt_ddiu_pss["12M_Outpatient_PV"] = lambda v: f"{int(v):,}" if pd.notna(v) else "—"
-        if "Last_Score_%" in pss_pend_ui.columns:
-            fmt_ddiu_pss["Last_Score_%"] = lambda v: f"{float(v):.1f}%" if pd.notna(v) else "—"
+        if "Last_Net_Patient_Satisfaction_%" in pss_pend_ui.columns:
+            fmt_ddiu_pss["Last_Net_Patient_Satisfaction_%"] = lambda v: f"{float(v):.1f}%" if pd.notna(v) else "—"
         styled_ddiu_pss = pss_pend_ui.style.format(fmt_ddiu_pss).set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
         st.dataframe(styled_ddiu_pss, hide_index=True, use_container_width=True)
 
@@ -5250,7 +5291,7 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
             fmt_map = {}
             if "12M_Outpatient_PV" in df_in.columns:
                 fmt_map["12M_Outpatient_PV"] = lambda v: f"{int(v):,}" if pd.notna(v) else "—"
-            for sc_col in ["Last_Score_%", "Prior_6M_Mean_%", "Recent_6M_Mean_%", "12M_Mean_%", "Latest_Score_%", "Prior_6M_Mean", "Recent_6M_Mean"]:
+            for sc_col in ["Last_Net_Patient_Satisfaction_%", "Prior_6M_Mean_%", "Recent_6M_Mean_%", "12M_Net_Patient_Satisfaction_%", "Latest_Score_%", "Prior_6M_Mean", "Recent_6M_Mean"]:
                 if sc_col in df_in.columns:
                     fmt_map[sc_col] = lambda v: f"{float(v):.1f}%" if pd.notna(v) else "—"
             if "Delta" in df_in.columns:

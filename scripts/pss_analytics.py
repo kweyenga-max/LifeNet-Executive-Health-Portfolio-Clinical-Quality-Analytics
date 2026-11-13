@@ -145,7 +145,7 @@ def get_pss_me_analytics(force_live=False):
             "12M_Surveillance_Status": "Zero PSS in Past 12 Months",
             "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
             "Last_Survey_in_12M": "None",
-            "Last_Score_%": np.nan,
+            "Last_Net_Patient_Satisfaction_%": np.nan,
             "Decision_Action": action,
         })
     for fac in only_p6:
@@ -165,7 +165,7 @@ def get_pss_me_analytics(force_live=False):
             "12M_Surveillance_Status": "Assessed in Prior 6M Only (>6M Ago)",
             "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
             "Last_Survey_in_12M": last_r["periodname"],
-            "Last_Score_%": round(last_sc, 2),
+            "Last_Net_Patient_Satisfaction_%": round(last_sc, 2),
             "Decision_Action": action,
         })
     pending_df = pd.DataFrame(pending_rows)
@@ -191,7 +191,7 @@ def get_pss_me_analytics(force_live=False):
                 "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
                 "Prior_6M_Mean_%": np.nan,
                 "Recent_6M_Mean_%": np.nan,
-                "12M_Mean_%": np.nan,
+                "12M_Net_Patient_Satisfaction_%": np.nan,
                 "Latest_Period": "—",
                 "Latest_Score_%": np.nan,
             })
@@ -211,7 +211,7 @@ def get_pss_me_analytics(force_live=False):
                 "12M_Outpatient_PV": pd.NA if fac_pv <= 0 else int(round(fac_pv)),
                 "Prior_6M_Mean_%": round(mp6, 2) if pd.notna(mp6) else np.nan,
                 "Recent_6M_Mean_%": round(mr6, 2) if pd.notna(mr6) else np.nan,
-                "12M_Mean_%": round(ov, 2),
+                "12M_Net_Patient_Satisfaction_%": round(ov, 2),
                 "Latest_Period": latest["periodname"],
                 "Latest_Score_%": round(float(latest["Net_Satisfaction_Score"]), 2),
             })
@@ -219,7 +219,7 @@ def get_pss_me_analytics(force_live=False):
     if not fac_summary_df.empty and "12M_Outpatient_PV" in fac_summary_df.columns:
         fac_summary_df["12M_Outpatient_PV"] = fac_summary_df["12M_Outpatient_PV"].astype("Int64")
     fac_summary_df = fac_summary_df.sort_values(
-        by=["12M_Mean_%", "Facility"], ascending=[False, True], na_position="last"
+        by=["12M_Net_Patient_Satisfaction_%", "Facility"], ascending=[False, True], na_position="last"
     )
 
     return {
@@ -357,7 +357,7 @@ def generate_pss_chart_insights(bundle):
     # 5. Executive Synthesis & Unassessed Facility Decision Matrix
     assessed_facs = fac_df[fac_df["12M_Rounds"] > 0]
     top_3 = assessed_facs.head(3)["Facility"].tolist() if not assessed_facs.empty else []
-    low_alert = assessed_facs[assessed_facs["12M_Mean_%"] < 75.0]["Facility"].tolist() if not assessed_facs.empty else []
+    low_alert = assessed_facs[assessed_facs["12M_Net_Patient_Satisfaction_%"] < 75.0]["Facility"].tolist() if not assessed_facs.empty else []
     unassessed_names = bundle.get("unassessed_list", [])
     overdue_names = bundle.get("only_p6_list", [])
 
