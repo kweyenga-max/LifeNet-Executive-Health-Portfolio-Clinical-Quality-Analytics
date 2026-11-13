@@ -5025,12 +5025,7 @@ elif active_tab == "📑 Monthly DDIU Brief":
             fmt_ddiu_pss["12M_Outpatient_PV"] = lambda v: f"{int(v):,}" if pd.notna(v) else "—"
         if "Last_Score_%" in pss_pend_ui.columns:
             fmt_ddiu_pss["Last_Score_%"] = lambda v: f"{float(v):.1f}%" if pd.notna(v) else "—"
-        styled_ddiu_pss = (
-            pss_pend_ui.style
-            .format(fmt_ddiu_pss)
-            .set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
-            .set_table_styles([{"selector": "th", "props": [("background-color", "#F1F5F9"), ("color": "#0F172A"), ("font-weight", "700")]}])
-        )
+        styled_ddiu_pss = pss_pend_ui.style.format(fmt_ddiu_pss).set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
         st.dataframe(styled_ddiu_pss, hide_index=True, use_container_width=True)
 
 elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)":
