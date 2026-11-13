@@ -5091,7 +5091,7 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
             fig_violin.add_hline(y=80.0, line_dash="dash", line_color="#0D9488", annotation_text="80% Quality Benchmark")
             fig_violin.update_layout(
                 height=390,
-                yaxis=dict(title="Net Satisfaction Score (%)", range=[55, 106], gridcolor="#E2E8F0"),
+                font=dict(color="#0F172A", size=12), xaxis=dict(tickfont=dict(color="#0F172A", size=12)), yaxis=dict(title=dict(text="Net Satisfaction Score (%)", font=dict(color="#0F172A")), tickfont=dict(color="#0F172A"), range=[55, 106], gridcolor="#E2E8F0"),
                 paper_bgcolor="#FFFFFF",
                 plot_bgcolor="#FFFFFF",
                 margin=dict(l=20, r=20, t=30, b=20),
@@ -5120,7 +5120,7 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
             fig_slope.add_hline(y=80.0, line_dash="dot", line_color="#94A3B8", annotation_text="80% Target")
             fig_slope.update_layout(
                 height=390,
-                yaxis=dict(title="Facility Mean Score (%)", range=[58, 103], gridcolor="#E2E8F0"),
+                font=dict(color="#0F172A", size=12), xaxis=dict(tickfont=dict(color="#0F172A", size=12)), yaxis=dict(title=dict(text="Facility Mean Score (%)", font=dict(color="#0F172A")), tickfont=dict(color="#0F172A"), range=[58, 103], gridcolor="#E2E8F0"),
                 paper_bgcolor="#FFFFFF",
                 plot_bgcolor="#FFFFFF",
                 margin=dict(l=20, r=20, t=30, b=20),
@@ -5153,6 +5153,7 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
                         marker=dict(colors=["#0D9488", "#00A8CC", "#D97706", "#DC2626"]),
                         textinfo="label+percent",
                         textposition="outside",
+                        textfont=dict(color="#0F172A", size=11),
                     )
                 ]
             )
@@ -5161,7 +5162,7 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
                 margin=dict(l=20, r=20, t=30, b=20),
                 paper_bgcolor="#FFFFFF",
                 showlegend=False,
-                annotations=[dict(text="38<br>Partner<br>Sites", x=0.5, y=0.5, font_size=15, showarrow=False)],
+                annotations=[dict(text="<b>38</b><br>Partner<br>Sites", x=0.5, y=0.5, font=dict(size=15, color="#0F172A"), showarrow=False)],
             )
             st.plotly_chart(fig_donut, use_container_width=True)
             st.info(insights["chart_c"])
@@ -5205,7 +5206,7 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
             fig_spc.add_hline(y=80.0, line_dash="dot", line_color="#DC2626", annotation_text="80% Quality Floor")
             fig_spc.update_layout(
                 height=370,
-                yaxis=dict(title="Net Satisfaction Score (%)", range=[55, 106], gridcolor="#E2E8F0"),
+                font=dict(color="#0F172A", size=12), xaxis=dict(tickfont=dict(color="#0F172A", size=12)), yaxis=dict(title=dict(text="Net Satisfaction Score (%)", font=dict(color="#0F172A")), tickfont=dict(color="#0F172A"), range=[55, 106], gridcolor="#E2E8F0"),
                 paper_bgcolor="#FFFFFF",
                 plot_bgcolor="#FFFFFF",
                 margin=dict(l=20, r=20, t=30, b=20),
@@ -5225,15 +5226,22 @@ elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PS
             "📈 Paired 6M Trajectory Table",
         ])
 
+        def _light_table(df_in):
+            return (
+                df_in.style
+                .set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
+                .set_table_styles([{"selector": "th", "props": [("background-color", "#F1F5F9"), ("color", "#0F172A"), ("font-weight", "700")]}])
+            )
+
         with tab_sub1:
             st.markdown(f"##### Risk-Prioritized Facilities With Zero PSS in Past 12 Months or Due for 6M Follow-Up ({win_lbl})")
             st.caption("Ranked by Priority Tier (P1 = High-Volume Blind Spots & Sub-75% Follow-Ups) and 12-Month Outpatient Volume so Mentor & M&E teams deploy where patient exposure is highest.")
-            st.dataframe(pending_df, hide_index=True, use_container_width=True)
+            st.dataframe(_light_table(pending_df), hide_index=True, use_container_width=True)
 
         with tab_sub2:
             st.markdown(f"##### Master Past-12-Month PSS Performance Directory (All 38 LifeNet Kenya Facilities)")
-            st.dataframe(fac_summary_df, hide_index=True, use_container_width=True)
+            st.dataframe(_light_table(fac_summary_df), hide_index=True, use_container_width=True)
 
         with tab_sub3:
             st.markdown("##### Paired Semi-Annual Trajectory (Facilities Assessed in Both Prior 6M & Recent 6M)")
-            st.dataframe(cohort_df, hide_index=True, use_container_width=True)
+            st.dataframe(_light_table(cohort_df), hide_index=True, use_container_width=True)

@@ -18,20 +18,28 @@ def _load_12m_pv_by_facility(roster, pe_12m):
         if df_pv.empty:
             return pv_map
         norm_to_can = {_norm_key(f): f for f in roster}
-        fac_col = next((c for c in ["Facility", "organisationunitname", "OrgUnit"] if c in df_pv.columns), None)
-        val_col = next((c for c in ["Patient_Volume", "Value", "Outpatient_Visits", "Total_PV"] if c in df_pv.columns), None)
-        per_col = next((c for c in ["Period", "periodid", "YYYYMM"] if c in df_pv.columns), None)
-        if not (fac_col and val_col):
+        fac_col = next((c for c in ["Facility", "organisationunitname", "OrgUnit", "Facility Name"] if c in df_pv.columns), None)
+        if not fac_col:
             return pv_map
         sub = df_pv.copy()
-        if per_col:
-            sub[per_col] = sub[per_col].astype(str)
-            if sub[per_col].str.isdigit().any():
-                sub = sub[sub[per_col].isin(pe_12m)]
+        # Filter to rolling 12-month periods using Period ("November 2025") or YYYYMM
+        month_names = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+        pe_labels = {f"{month_names[int(c[4:6])-1]} {c[:4]}" for c in pe_12m}
+        if "Period" in sub.columns:
+            sub = sub[sub["Period"].astype(str).isin(pe_labels | set(pe_12m))]
+        elif "periodid" in sub.columns:
+            sub = sub[sub["periodid"].astype(str).isin(set(pe_12m))]
+
+        # Sum numeric attendance columns (or Value column if long format)
+        if "Value" in sub.columns:
+            sub["_pv_val"] = pd.to_numeric(sub["Value"], errors="coerce").fillna(0)
+        else:
+            num_cols = [c for c in sub.columns if c not in {fac_col, "Period", "periodid", "Year", "Month", "County", "SubCounty", "Code"} and pd.api.types.is_numeric_dtype(sub[c])]
+            sub["_pv_val"] = sub[num_cols].sum(axis=1) if num_cols else 0
+
         sub["Canonical"] = sub[fac_col].map(lambda x: norm_to_can.get(_norm_key(x)))
         sub = sub[sub["Canonical"].notna()]
-        sub[val_col] = pd.to_numeric(sub[val_col], errors="coerce").fillna(0)
-        pv_map = sub.groupby("Canonical")[val_col].sum().to_dict()
+        pv_map = sub.groupby("Canonical")["_pv_val"].sum().to_dict()
     except Exception:
         pass
     return pv_map
