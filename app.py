@@ -1225,7 +1225,8 @@ elif active_tab == "📈 Program KPI Comparative Analytics":
     )
 
 elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
-    st.markdown("### 🎯 Quality Scorecard (QSC) & Capacity Building Evaluation")
+    from scripts.qsc_ui_theme import render_qsc_navy_header, render_qsc_facility_matrix
+    render_qsc_navy_header()
     qsc_nav_choice = st.radio(
         "Select QSC Workspace Level:",
         options=[
@@ -1283,14 +1284,14 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
             # Summary Banner
             st.markdown(
                 f"""
-                <div style="background-color:#FFFFFF; border:1px solid #CBD5E1; border-radius:8px; padding:16px; margin-bottom:15px; text-align:center;">
-                    <h3 style="color:#0F172A; margin-top:0;">{res_c3['Module']} Paired-t Intervention Analysis (Cohort 3)</h3>
-                    <p style="color:#0F172A; font-size:15px;">
+                <div class="qsc-stat-strip">
+                    <h4>{res_c3['Module']} Paired-t Intervention Analysis (Cohort 3)</h3>
+                    <p>
                         <b>Baseline Mean:</b> {res_c3['Baseline_Mean']}% (SD={res_c3['Baseline_SD']}) &nbsp;|&nbsp; 
                         <b>Endline Mean:</b> {res_c3['Endline_Mean']}% (SD={res_c3['Endline_SD']}) &nbsp;|&nbsp; 
                         <b>Mean Gain:</b> +{res_c3['Mean_Gain']} pts &nbsp;|&nbsp; 
                         <b>Cohen's d<sub>z</sub>:</b> {res_c3['Cohen_dz']} &nbsp;|&nbsp; 
-                        <span style="color:#16A34A; font-weight:800;">p = {p_fmt}</span>
+                        <span class="qsc-stat-badge">p = {p_fmt}</span>
                     </p>
                 </div>
             """,
@@ -1673,10 +1674,10 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                 with q1:
                     st.markdown(
                         f"""
-                        <div class="kpi-card">
-                            <div class="kpi-header"><span class="kpi-title">Pre-Training Baseline</span><span class="kpi-icon">📝</span></div>
-                            <div class="kpi-value">{avg_base_all:.1f}%</div>
-                            <span class="badge-positive">Baseline Score</span>
+                        <div class="qsc-kpi-card">
+                            <div class="qsc-kpi-top"><span>Pre-Training Baseline</span><span>📝</span></div>
+                            <div class="qsc-kpi-val">{avg_base_all:.1f}%</div>
+                            <span class="qsc-kpi-pill">Baseline Score</span>
                         </div>
                     """,
                         unsafe_allow_html=True,
@@ -1685,10 +1686,10 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                 with q2:
                     st.markdown(
                         f"""
-                        <div class="kpi-card">
-                            <div class="kpi-header"><span class="kpi-title">Post-Training Endline</span><span class="kpi-icon">🎯</span></div>
-                            <div class="kpi-value">{avg_end_all:.1f}%</div>
-                            <span class="badge-positive">Endline Score</span>
+                        <div class="qsc-kpi-card">
+                            <div class="qsc-kpi-top"><span>Post-Training Endline</span><span>🎯</span></div>
+                            <div class="qsc-kpi-val">{avg_end_all:.1f}%</div>
+                            <span class="qsc-kpi-pill">Endline Score</span>
                         </div>
                     """,
                         unsafe_allow_html=True,
@@ -1697,10 +1698,10 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                 with q3:
                     st.markdown(
                         f"""
-                        <div class="kpi-card">
-                            <div class="kpi-header"><span class="kpi-title">Net Capacity Gain</span><span class="kpi-icon">📈</span></div>
-                            <div class="kpi-value">+{avg_gain_all:.1f}%</div>
-                            <span class="badge-positive">+{avg_rel_growth:.1f}% Growth Rate</span>
+                        <div class="qsc-kpi-card">
+                            <div class="qsc-kpi-top"><span>Net Capacity Gain</span><span>📈</span></div>
+                            <div class="qsc-kpi-val">+{avg_gain_all:.1f}%</div>
+                            <span class="qsc-kpi-pill">+{avg_rel_growth:.1f}% Growth Rate</span>
                         </div>
                     """,
                         unsafe_allow_html=True,
@@ -1710,10 +1711,10 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                     sig_count = sum(1 for p in df_ttest["p-Value"] if p < 0.05)
                     st.markdown(
                         f"""
-                        <div class="kpi-card">
-                            <div class="kpi-header"><span class="kpi-title">Validated Modules</span><span class="kpi-icon">🔬</span></div>
-                            <div class="kpi-value">{sig_count} / {len(df_ttest)}</div>
-                            <span class="badge-positive">Statistically Significant</span>
+                        <div class="qsc-kpi-card">
+                            <div class="qsc-kpi-top"><span>Validated Modules</span><span>🔬</span></div>
+                            <div class="qsc-kpi-val">{sig_count} / {len(df_ttest)}</div>
+                            <span class="qsc-kpi-pill">Statistically Significant</span>
                         </div>
                     """,
                         unsafe_allow_html=True,
@@ -1777,7 +1778,7 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                             textfont=dict(
                                 color=COLOR_TEXT_MAIN, size=12, family="Inter"
                             ),
-                            marker_color=COLOR_GREEN_SUCCESS,
+                            marker_color="#0F2C59",
                         )
                     )
                     fig_top5.update_layout(
@@ -1853,23 +1854,10 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                     st.plotly_chart(fig_bot5, width="stretch")
 
                 st.markdown("---")
-                st.dataframe(
-                    df_fac_perf.sort_values(by="Endline_Avg", ascending=False),
-                    column_config={
-                        fac_col_name: "Health Facility Name",
-                        "Baseline_Avg": st.column_config.NumberColumn(
-                            "Baseline Avg Score", format="%.1f%%"
-                        ),
-                        "Endline_Avg": st.column_config.NumberColumn(
-                            "Endline Avg Score", format="%.1f%%"
-                        ),
-                        "Net_Gain": st.column_config.NumberColumn(
-                            "Net Capacity Gain", format="%+.1f pts"
-                        ),
-                        "Quality_Tier": "Quality Benchmark Tier",
-                    },
-                    hide_index=True,
-                    width="stretch",
+                render_qsc_facility_matrix(
+                    df_fac_perf,
+                    fac_col_name,
+                    "Medical" if is_medical else "Management",
                 )
 
             elif qsc_nav_choice == "🔬 Scientific Paired-Line Intervention Analytics":
@@ -1912,7 +1900,7 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                             <b>Baseline:</b> n={mod_row['N']}, mean={mod_row['Baseline Mean (%)']}%, SD={mod_row['Baseline SD']} &nbsp;|&nbsp; 
                             <b>Endline:</b> n={mod_row['N']}, mean={mod_row['Endline Mean (%)']}%, SD={mod_row['Endline SD']} &nbsp;|&nbsp; 
                             <b>Cohen's d<sub>z</sub>:</b> {mod_row['Cohen_dz']} &nbsp;|&nbsp; 
-                            <span style="color:#16A34A; font-weight:800;">p = {p_val_fmt} ({mod_row['Significance']})</span>
+                            <span class="qsc-stat-badge">p = {p_val_fmt} ({mod_row['Significance']})</span>
                         </p>
                     </div>
                 """,
@@ -2184,7 +2172,7 @@ elif active_tab == "🎯 Quality Scorecard (QSC) & QI Analytics":
                                 color=COLOR_TEXT_MAIN, size=12.5, family="Inter"
                             ),
                             marker_color=(
-                                COLOR_NAVY_PRIMARY if is_medical else COLOR_AMBER_WARN
+                                "#0F2C59" if is_medical else "#0D9488"
                             ),
                         )
                     )
