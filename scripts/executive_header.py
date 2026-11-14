@@ -7,7 +7,7 @@ def render_executive_header_and_nav(tabs, focus_year, comparison_year, selected_
         <style>
         /* Tighten top page padding for a crisp executive masthead */
         .block-container {
-            padding-top: 1.6rem !important;
+            padding-top: 2.6rem !important;
         }
 
         /* High-contrast Sign Out button styling */
@@ -43,7 +43,7 @@ def render_executive_header_and_nav(tabs, focus_year, comparison_year, selected_
         div[data-testid="stRadio"] > label { display: none !important; }
         div[data-testid="stRadio"] [data-baseweb="radio"] > div:first-child { display: none !important; }
         /* Hide dot */
-        div[data-testid="stRadio"] div[role="radiogroup"] label > div:first-child {
+        div[data-testid="stRadio"] div[role="radiogroup"] label > div:first-child, div[data-testid="stRadio"] [data-baseweb="radio"] > div:first-child {
             display: none !important;
         }
 
