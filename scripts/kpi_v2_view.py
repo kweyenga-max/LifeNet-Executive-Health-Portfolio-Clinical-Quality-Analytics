@@ -422,6 +422,7 @@ def render_kpi_v2_dashboard(df_base, df_focus, selected_months, focus_year, comp
                         fillcolor="rgba(148, 163, 184, 0.18)",
                         line=dict(color="rgba(255,255,255,0)"),
                         name=f"{comparison_year} ±1 SD Band",
+                        hoverinfo="skip",
                     )
                 )
 
@@ -429,30 +430,41 @@ def render_kpi_v2_dashboard(df_base, df_focus, selected_months, focus_year, comp
                 go.Scatter(
                     x=monthly_df["Month"],
                     y=y_base,
-                    mode="lines+markers+text",
-                    text=[f"{int(v):,}" if pd.notna(v) else "" for v in y_base],
-                    textposition="bottom center",
-                    textfont=dict(color="#475569", size=10.5),
+                    mode="lines+markers",
                     name=f"{comparison_year} Baseline",
                     line=dict(color="#64748B", width=2.5, dash="dash"),
                     marker=dict(size=7, color="#64748B"),
+                    hovertemplate="%{y:,.0f}",
                 )
             )
-            marker_sizes = [12 if sel else 8 for sel in monthly_df["IsSelected"]]
+            marker_sizes = [13 if sel else 8 for sel in monthly_df["IsSelected"]]
             marker_colors = ["#0D9488" if sel else "#0F2C59" for sel in monthly_df["IsSelected"]]
+            txt_positions = [
+                "top center" if (pd.isna(b) or (pd.notna(f) and f >= b)) else "bottom center"
+                for f, b in zip(y_focus, y_base)
+            ]
             fig_trend.add_trace(
                 go.Scatter(
                     x=monthly_df["Month"],
                     y=y_focus,
                     mode="lines+markers+text",
-                    text=[f"<b>{int(v):,}</b>" if (pd.notna(v) and sel) else (f"{int(v):,}" if pd.notna(v) else "") for v, sel in zip(y_focus, monthly_df["IsSelected"])],
-                    textposition="top center",
-                    textfont=dict(color=TEXT_DARK, size=11),
+                    text=[
+                        f"<b>{int(v):,}</b>" if (pd.notna(v) and sel) else (f"{int(v):,}" if pd.notna(v) else "")
+                        for v, sel in zip(y_focus, monthly_df["IsSelected"])
+                    ],
+                    textposition=txt_positions,
+                    textfont=dict(color=TEXT_DARK, size=11.5),
                     name=f"{focus_year} Focus (Highlighted = Selected)",
                     line=dict(color="#0F2C59", width=3.5),
                     marker=dict(size=marker_sizes, color=marker_colors, line=dict(width=1.5, color="#FFFFFF")),
+                    hovertemplate="<b>%{y:,.0f}</b>",
                 )
             )
+            all_vals = pd.concat([y_base.dropna(), y_focus.dropna()])
+            if not all_vals.empty:
+                y_min, y_max = all_vals.min(), all_vals.max()
+                span = max(50, y_max - y_min)
+                fig_trend.update_yaxes(range=[max(0, y_min - span * 0.28), y_max + span * 0.25])
         elif trend_metric == "Stillbirth Rate (per 1,000)":
             y_sbr = monthly_df[f"{focus_year} SBR (per 1k)"]
             fig_trend.add_trace(
@@ -500,7 +512,7 @@ def render_kpi_v2_dashboard(df_base, df_focus, selected_months, focus_year, comp
             )
 
         _apply_clean_theme(fig_trend, height=370)
-        fig_trend.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_trend.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig_trend, use_container_width=True)
 
     with t2:
