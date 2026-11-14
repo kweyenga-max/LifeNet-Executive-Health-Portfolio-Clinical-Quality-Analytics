@@ -426,11 +426,18 @@ def render_kpi_v2_dashboard(df_base, df_focus, selected_months, focus_year, comp
                     )
                 )
 
+            base_txt_positions = [
+                "bottom center" if (pd.notna(f) and f >= b) else "top center"
+                for f, b in zip(y_focus, y_base)
+            ]
             fig_trend.add_trace(
                 go.Scatter(
                     x=monthly_df["Month"],
                     y=y_base,
-                    mode="lines+markers",
+                    mode="lines+markers+text",
+                    text=[f"{int(v):,}" if pd.notna(v) else "" for v in y_base],
+                    textposition=base_txt_positions,
+                    textfont=dict(color="#475569", size=10.5),
                     name=f"{comparison_year} Baseline",
                     line=dict(color="#64748B", width=2.5, dash="dash"),
                     marker=dict(size=7, color="#64748B"),
