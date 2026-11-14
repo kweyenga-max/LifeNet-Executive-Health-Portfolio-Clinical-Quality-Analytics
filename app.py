@@ -1298,6 +1298,7 @@ with col_h2:
 tabs = [
     "📊 Patient Volume Dashboard",
     "📈 Program KPI Comparative Analytics",
+    "🚀 Program KPI Executive Analytics (V2)",
     "🎯 Quality Scorecard (QSC) & QI Analytics",
     "🚨 Data Quality Audits",
     "🔍 Facility Inspector",
@@ -1609,6 +1610,17 @@ if active_tab == "📊 Patient Volume Dashboard":
 # ---------------------------------------------------------
 # TAB 2: PROGRAM KPI COMPARATIVE ANALYTICS
 # ---------------------------------------------------------
+elif active_tab == "🚀 Program KPI Executive Analytics (V2)":
+    from scripts.kpi_v2_view import render_kpi_v2_dashboard
+    render_kpi_v2_dashboard(
+        kpi_2025 if comparison_year == "2025" else kpi_2026,
+        kpi_2026 if focus_year == "2026" else kpi_2025,
+        selected_months,
+        focus_year,
+        comparison_year,
+        selected_period,
+    )
+
 elif active_tab == "📈 Program KPI Comparative Analytics":
     st.markdown(
         f"### 📈 Clinical Deliveries & MOH 711 Indicators ({focus_year} Focus — {selected_period})"
