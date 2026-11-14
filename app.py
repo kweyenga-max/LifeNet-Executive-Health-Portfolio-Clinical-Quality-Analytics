@@ -1279,22 +1279,6 @@ with st.sidebar:
         selected_period = f"Full Year ({focus_year})"
         selected_months = all_months
         # Inside `with st.sidebar:` section at the bottom:
-# ---------------------------------------------------------
-# EXECUTIVE HERO BANNER & HEADER (SURGICAL EDIT)
-# ---------------------------------------------------------
-col_h1, col_h2 = st.columns([4, 1])
-with col_h1:
-    st.caption("🔒 Session Active: Executive Level")
-    st.title("LifeNet Program Analytics & Executive Dashboard")
-    st.subheader(f"Specific Year Focus & Comparative Performance ({focus_year} vs. {comparison_year})")
-    st.info(f"📅 CURRENT REPORTING FOCUS: {selected_period} | Baseline: {comparison_year}")
-
-with col_h2:
-    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
-    if st.button("Log Out", key="btn_logout_native_clean", use_container_width=True):
-        st.session_state["authenticated"] = False
-        st.rerun()
-
 tabs = [
     "📊 Patient Volume Dashboard",
     "📈 Program KPI Comparative Analytics",
@@ -1305,7 +1289,8 @@ tabs = [
     "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)",
     "📑 Monthly DDIU Brief",
 ]
-active_tab = st.radio("Nav", options=tabs, horizontal=True)
+from scripts.executive_header import render_executive_header_and_nav
+active_tab = render_executive_header_and_nav(tabs, focus_year, comparison_year, selected_period)
 st.markdown("---")
 
 # ---------------------------------------------------------
