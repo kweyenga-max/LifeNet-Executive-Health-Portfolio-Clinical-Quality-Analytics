@@ -18,6 +18,11 @@ def send_ddiu_report_email(period_label: str | None = None, recipients_override:
         cfg = tomllib.load(f).get("email", {})
 
     period_label = period_label or default_ddiu_period(BASE_DIR)
+    try:
+        from scripts.khis_anc_live import get_live_anc_frame
+        get_live_anc_frame("IPjuLUsTQHG", force_live=True)
+    except Exception:
+        pass
     pdf_path = save_monthly_ddiu_report(period_label, base_dir=BASE_DIR)
     data = build_ddiu_dataset(period_label, base_dir=BASE_DIR)
 
@@ -58,6 +63,10 @@ def send_ddiu_report_email(period_label: str | None = None, recipients_override:
           <tr>
             <td style="padding: 10px; border: 1px solid #E2E8F0;"><b>Maternity Deliveries</b></td>
             <td style="padding: 10px; border: 1px solid #E2E8F0;"><b>{data['tot_del']:,}</b> ({data['tot_lb']:,} Live Births | {data['tot_fsb'] + data['tot_msb']} Stillbirths)</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #E2E8F0;"><b>Antenatal Care (ANC) Continuum</b></td>
+            <td style="padding: 10px; border: 1px solid #E2E8F0;"><b>{data.get('tot_anc1', 0):,}</b> 1st ANC | Early &le;12w: <b>{data.get('anc_early_pct', 0.0):.1f}%</b> | ANC4+: <b>{data.get('anc4_pct', 0.0):.1f}%</b> | Syphilis: <b>{data.get('anc_syph_pct', 0.0):.1f}%</b></td>
           </tr>
           <tr style="background: #F7FAFC;">
             <td style="padding: 10px; border: 1px solid #E2E8F0;"><b>Reporting Completeness</b></td>

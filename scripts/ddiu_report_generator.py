@@ -372,7 +372,9 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
         })
 
     # Antenatal Care (ANC) Continuum Integration
-    tot_anc1, anc_early_pct, anc4_pct, anc_adol_pct, anc_syph_pct = 0, 0.0, 0.0, 0.0, 0.0
+    tot_anc1, tot_e12, tot_a4, tot_sy, tot_ifas = 0, 0, 0, 0, 0
+    anc_early_pct, anc4_pct, anc_adol_pct, anc_syph_pct, anc_ifas_pct = 0.0, 0.0, 0.0, 0.0, 0.0
+    anc_fac_df = pd.DataFrame(columns=["Facility", "ANC1", "ANC4", "ANC4_Pct", "Early12_Pct", "Syph_Pct"])
     anc_snap_path = base_dir / "data" / "khis_anc_snapshot.csv.gz"
     if anc_snap_path.exists():
         try:
@@ -381,18 +383,29 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
             anc_curr = df_anc_ddiu[df_anc_ddiu["period_name"].astype(str).str.strip() == period_label].copy()
             if not anc_curr.empty:
                 tot_anc1 = int(pd.to_numeric(anc_curr["ANC_1st_New"], errors="coerce").fillna(0).sum())
-                tot_e12 = float(pd.to_numeric(anc_curr["ANC_1st_Under_12w"], errors="coerce").fillna(0).sum())
-                tot_a4 = float(pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0).sum())
+                tot_e12 = int(pd.to_numeric(anc_curr["ANC_1st_Under_12w"], errors="coerce").fillna(0).sum())
+                tot_a4 = int(pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0).sum())
                 tot_ad = float(pd.to_numeric(anc_curr["ANC_Adol_10_14"], errors="coerce").fillna(0).sum() + pd.to_numeric(anc_curr["ANC_Adol_15_19"], errors="coerce").fillna(0).sum())
-                tot_sy = float(pd.to_numeric(anc_curr["ANC_Syphilis_Tested"], errors="coerce").fillna(0).sum())
+                tot_sy = int(pd.to_numeric(anc_curr["ANC_Syphilis_Tested"], errors="coerce").fillna(0).sum())
+                tot_ifas = int(pd.to_numeric(anc_curr.get("ANC_IFAS", 0), errors="coerce").fillna(0).sum())
                 denom_a1 = max(1.0, float(tot_anc1))
                 anc_early_pct = tot_e12 / denom_a1 * 100.0
                 anc4_pct = tot_a4 / denom_a1 * 100.0
                 anc_adol_pct = tot_ad / denom_a1 * 100.0
                 anc_syph_pct = tot_sy / denom_a1 * 100.0
+                anc_ifas_pct = tot_ifas / denom_a1 * 100.0
                 anc_curr["n1"] = pd.to_numeric(anc_curr["ANC_1st_New"], errors="coerce").fillna(0)
                 anc_curr["a4_r"] = pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0) / anc_curr["n1"].replace(0, np.nan) * 100.0
+                anc_curr["e12_r"] = pd.to_numeric(anc_curr["ANC_1st_Under_12w"], errors="coerce").fillna(0) / anc_curr["n1"].replace(0, np.nan) * 100.0
                 anc_curr["sy_r"] = pd.to_numeric(anc_curr["ANC_Syphilis_Tested"], errors="coerce").fillna(0) / anc_curr["n1"].replace(0, np.nan) * 100.0
+                anc_fac_df = pd.DataFrame({
+                    "Facility": anc_curr["facility_name"],
+                    "ANC1": anc_curr["n1"].astype(int),
+                    "ANC4": pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0).astype(int),
+                    "ANC4_Pct": anc_curr["a4_r"],
+                    "Early12_Pct": anc_curr["e12_r"],
+                    "Syph_Pct": anc_curr["sy_r"],
+                })
                 low_anc4_facs = anc_curr[(anc_curr["n1"] >= 5) & (anc_curr["a4_r"] < 50.0)]["facility_name"].tolist()
                 if low_anc4_facs:
                     action_items.append({
@@ -471,6 +484,12 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
         "pv_yoy_pct": pv_yoy_pct,
         "tot_del": tot_del,
         "tot_anc1": tot_anc1,
+        "tot_e12": tot_e12,
+        "tot_a4": tot_a4,
+        "tot_sy": tot_sy,
+        "tot_ifas": tot_ifas,
+        "anc_ifas_pct": anc_ifas_pct,
+        "anc_fac_df": anc_fac_df,
         "anc_early_pct": anc_early_pct,
         "anc4_pct": anc4_pct,
         "anc_adol_pct": anc_adol_pct,
@@ -638,6 +657,68 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
     buf4.seek(0)
     charts["emonc_trend"] = buf4
 
+    # Chart 5: ANC Continuum & Preventive Care Cascade
+    fig, (ax_c1, ax_c2) = plt.subplots(1, 2, figsize=(7.2, 2.35), dpi=220)
+    stages = ["1st ANC\nNew", "Early\n(<=12w)", "4th ANC\n(ANC4+)", "Syphilis\nTested", "IFAS\nSupplied"]
+    vals = [
+        data.get("tot_anc1", 0),
+        data.get("tot_e12", 0),
+        data.get("tot_a4", 0),
+        data.get("tot_sy", 0),
+        data.get("tot_ifas", 0),
+    ]
+    pcts = [
+        100.0 if vals[0] > 0 else 0.0,
+        data.get("anc_early_pct", 0.0),
+        data.get("anc4_pct", 0.0),
+        data.get("anc_syph_pct", 0.0),
+        data.get("anc_ifas_pct", 0.0),
+    ]
+    c_bars = ax_c1.bar(stages, vals, color=[LN_NAVY, LN_TEAL, LN_EMERALD, "#2563EB", "#7C3AED"], width=0.55)
+    ax_c1.set_ylim(0, max(max(vals), 10) * 1.28)
+    ax_c1.set_title(f"ANC Continuum Cascade — {data['period']}", fontsize=8.8, fontweight="bold", color=LN_NAVY, loc="left", pad=6)
+    ax_c1.tick_params(axis="x", labelsize=7.0, labelcolor=LN_SLATE)
+    ax_c1.tick_params(axis="y", labelsize=7.0, labelcolor=LN_SLATE)
+    ax_c1.grid(axis="y", linestyle="--", alpha=0.35, color="#CBD5E1")
+    ax_c1.set_axisbelow(True)
+    ax_c1.spines["top"].set_visible(False)
+    ax_c1.spines["right"].set_visible(False)
+    for b, v, p in zip(c_bars, vals, pcts):
+        ax_c1.annotate(f"{int(v):,}\n({p:.0f}%)", (b.get_x() + b.get_width()/2, b.get_height()),
+                       xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=6.4, fontweight="bold", color=LN_SLATE)
+
+    # Chart 6: Facility ANC4+ Retention Outliers (Bottom 8 Active Sites with >=5 1st ANC)
+    af = data.get("anc_fac_df", pd.DataFrame())
+    if not af.empty:
+        sub_af = af[af["ANC1"] >= 5].dropna(subset=["ANC4_Pct"]).sort_values("ANC4_Pct", ascending=True).head(8)
+    else:
+        sub_af = pd.DataFrame()
+    if not sub_af.empty:
+        f_labels = [f[:22] + "..." if len(f) > 25 else f for f in sub_af["Facility"]]
+        f_cols = [LN_CRIMSON if v < 50.0 else (LN_AMBER if v < 65.0 else LN_EMERALD) for v in sub_af["ANC4_Pct"]]
+        obars = ax_c2.barh(f_labels, sub_af["ANC4_Pct"].clip(upper=140), color=f_cols, height=0.58)
+        ax_c2.axvline(50.0, color=LN_CRIMSON, linestyle="--", linewidth=1.0, alpha=0.8)
+        ax_c2.set_xlim(0, max(sub_af["ANC4_Pct"].clip(upper=140).max() * 1.24, 70))
+        ax_c2.set_title("Lowest ANC4+ Retention Sites (50% Alert Line)", fontsize=8.8, fontweight="bold", color=LN_NAVY, loc="left", pad=6)
+        ax_c2.tick_params(axis="both", labelsize=6.8, labelcolor=LN_SLATE)
+        ax_c2.grid(axis="x", linestyle="--", alpha=0.35, color="#CBD5E1")
+        ax_c2.set_axisbelow(True)
+        ax_c2.spines["top"].set_visible(False)
+        ax_c2.spines["right"].set_visible(False)
+        for b, (_, r) in zip(obars, sub_af.iterrows()):
+            ax_c2.text(b.get_width() + 1.5, b.get_y() + b.get_height()/2, f"{r['ANC4_Pct']:.0f}% ({int(r['ANC4'])}/{int(r['ANC1'])})",
+                       va="center", fontsize=6.4, fontweight="bold", color=LN_SLATE)
+    else:
+        ax_c2.text(0.5, 0.5, "No ANC4+ outlier sites for period", ha="center", va="center", fontsize=8, color=LN_MUTED)
+        ax_c2.axis("off")
+
+    fig.tight_layout()
+    buf_anc = io.BytesIO()
+    fig.savefig(buf_anc, format="png")
+    plt.close(fig)
+    buf_anc.seek(0)
+    charts["anc_overview"] = buf_anc
+
     return charts
 
 
@@ -756,6 +837,8 @@ def generate_ddiu_pdf_bytes(period_label: str, base_dir: Path | None = None) -> 
     story.append(Image(charts["emonc_trend"], width=7.1 * inch, height=2.25 * inch))
     story.append(Spacer(1, 4))
     story.append(Image(charts["top_facilities"], width=7.1 * inch, height=2.55 * inch))
+    story.append(Spacer(1, 5))
+    story.append(Image(charts["anc_overview"], width=7.1 * inch, height=2.30 * inch))
 
     story.append(Paragraph("2. Partner Highlights — What Facilities Did Well", s_sec))
     story.append(HRFlowable(width="100%", thickness=1, color=c_emerald, spaceAfter=6))

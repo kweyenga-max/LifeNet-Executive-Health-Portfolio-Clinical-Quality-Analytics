@@ -2633,6 +2633,67 @@ elif active_tab == "📑 Monthly DDIU Brief":
         fig_ddiu_apgar.update_yaxes(title_text="Success %", range=[0, 110], secondary_y=True)
         st.plotly_chart(fig_ddiu_apgar, use_container_width=True)
 
+    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+    anc_c1, anc_c2 = st.columns(2)
+    with anc_c1:
+        anc_stages = ["1st ANC New", "Early (≤12w)", "4th ANC (ANC4+)", "Syphilis Tested", "IFAS Supplied"]
+        anc_vals = [
+            ddiu_data.get("tot_anc1", 0),
+            ddiu_data.get("tot_e12", 0),
+            ddiu_data.get("tot_a4", 0),
+            ddiu_data.get("tot_sy", 0),
+            ddiu_data.get("tot_ifas", 0),
+        ]
+        anc_pcts = [
+            100.0 if anc_vals[0] > 0 else 0.0,
+            ddiu_data.get("anc_early_pct", 0.0),
+            ddiu_data.get("anc4_pct", 0.0),
+            ddiu_data.get("anc_syph_pct", 0.0),
+            ddiu_data.get("anc_ifas_pct", 0.0),
+        ]
+        fig_ddiu_anc_cascade = go.Figure(
+            go.Bar(
+                x=anc_stages,
+                y=anc_vals,
+                marker_color=["#0A2540", "#0D9488", "#10B981", "#2563EB", "#7C3AED"],
+                text=[f"{int(v):,} ({p:.0f}%)" for v, p in zip(anc_vals, anc_pcts)],
+                textposition="outside",
+            )
+        )
+        fig_ddiu_anc_cascade.update_layout(
+            title=f"Antenatal Care (ANC) Continuum Cascade — {ddiu_period}",
+            height=340,
+            margin=dict(l=20, r=20, t=50, b=20),
+            yaxis=dict(range=[0, max(max(anc_vals), 10) * 1.22]),
+        )
+        st.plotly_chart(fig_ddiu_anc_cascade, use_container_width=True)
+
+    with anc_c2:
+        af_ddiu = ddiu_data.get("anc_fac_df", pd.DataFrame())
+        sub_af_web = af_ddiu[af_ddiu["ANC1"] >= 5].dropna(subset=["ANC4_Pct"]).sort_values("ANC4_Pct", ascending=True).head(10) if not af_ddiu.empty else pd.DataFrame()
+        if not sub_af_web.empty:
+            bar_cols = ["#DC2626" if v < 50.0 else ("#D97706" if v < 65.0 else "#0D9488") for v in sub_af_web["ANC4_Pct"]]
+            fig_ddiu_anc_out = go.Figure(
+                go.Bar(
+                    x=sub_af_web["ANC4_Pct"],
+                    y=sub_af_web["Facility"],
+                    orientation="h",
+                    marker_color=bar_cols,
+                    text=[f"{r['ANC4_Pct']:.1f}% ({int(r['ANC4'])}/{int(r['ANC1'])})" for _, r in sub_af_web.iterrows()],
+                    textposition="outside",
+                )
+            )
+            fig_ddiu_anc_out.add_vline(x=50.0, line_dash="dash", line_color="#DC2626", annotation_text="50% Action Threshold")
+            fig_ddiu_anc_out.update_layout(
+                title=f"Lowest ANC4+ Retention Facilities — {ddiu_period}",
+                height=340,
+                margin=dict(l=20, r=40, t=50, b=20),
+                xaxis=dict(title="ANC4+ Retention (%)", range=[0, max(sub_af_web["ANC4_Pct"].max() * 1.25, 70)]),
+            )
+            st.plotly_chart(fig_ddiu_anc_out, use_container_width=True)
+        else:
+            st.info(f"No facilities with ≥5 1st ANC contacts in {ddiu_period} to rank ANC4+ retention.")
+
     st.markdown("#### 🎯 Role-Based DDIU Action Plan (M&E, Medical & Management Mentors)")
     if not ddiu_data["action_df"].empty:
         st.dataframe(ddiu_data["action_df"], hide_index=True, use_container_width=True)
