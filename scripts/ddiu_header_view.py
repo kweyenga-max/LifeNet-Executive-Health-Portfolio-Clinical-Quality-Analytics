@@ -137,6 +137,9 @@ def render_ddiu_top_section():
     pv_mom = float(ddiu_data["pv_mom_pct"])
     pv_yoy = float(ddiu_data["pv_yoy_pct"])
     tot_del = int(ddiu_data["tot_del"])
+    tot_anc1 = int(ddiu_data.get("tot_anc1", 0))
+    anc4_pct = float(ddiu_data.get("anc4_pct", 0.0))
+    anc_early_pct = float(ddiu_data.get("anc_early_pct", 0.0))
     tot_lb = int(ddiu_data["tot_lb"])
     tot_sb = int(ddiu_data["tot_fsb"] + ddiu_data["tot_msb"])
     khis_rep = int(ddiu_data["khis_reporting"])
@@ -170,7 +173,7 @@ def render_ddiu_top_section():
                 <div style="color:#BFDBFE; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em;">Maternity Deliveries</div>
                 <div style="color:#FFFFFF; font-size:26px; font-weight:800; margin:6px 0; letter-spacing:-0.02em;">{tot_del:,}</div>
                 <span style="background:#ECFDF5; border:1px solid #A7F3D0; color:#065F46; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:6px;">
-                    ↑ {tot_lb:,} Live Births | {tot_sb} SB
+                    LB: {tot_lb:,} · ANC4+: {anc4_pct:.0f}% · Early: {anc_early_pct:.0f}%
                 </span>
             </div>
             <div style="background:linear-gradient(145deg, #0B2244 0%, #0F2C59 100%); border:1px solid #1E40AF; border-top:3.5px solid #38BDF8; border-radius:12px; padding:16px 18px; box-shadow:0 4px 14px rgba(15,44,89,0.14);">

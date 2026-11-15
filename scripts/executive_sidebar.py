@@ -169,4 +169,9 @@ def render_executive_sidebar():
             unsafe_allow_html=True,
         )
 
+        if st.button("🔄 Sync All Live KHIS Data", use_container_width=True, help="Refresh PV, Deliveries, ANC, DQA & DDIU from KHIS"):
+            st.session_state["_force_khis_sync"] = True
+            st.cache_data.clear()
+            st.rerun()
+
     return focus_year, comparison_year, time_frame_type, selected_months, selected_period

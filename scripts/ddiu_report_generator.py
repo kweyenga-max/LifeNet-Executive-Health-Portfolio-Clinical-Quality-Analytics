@@ -371,6 +371,49 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
             "Action Required": "Investigate root causes of >25% MoM attendance drop (drug stockouts, staffing gaps, or outreach schedule).",
         })
 
+    # Antenatal Care (ANC) Continuum Integration
+    tot_anc1, anc_early_pct, anc4_pct, anc_adol_pct, anc_syph_pct = 0, 0.0, 0.0, 0.0, 0.0
+    anc_snap_path = base_dir / "data" / "khis_anc_snapshot.csv.gz"
+    if anc_snap_path.exists():
+        try:
+            df_anc_ddiu = pd.read_csv(anc_snap_path, compression="gzip")
+            df_anc_ddiu = df_anc_ddiu[df_anc_ddiu["facility_name"].apply(_is_active_facility)].copy()
+            anc_curr = df_anc_ddiu[df_anc_ddiu["period_name"].astype(str).str.strip() == period_label].copy()
+            if not anc_curr.empty:
+                tot_anc1 = int(pd.to_numeric(anc_curr["ANC_1st_New"], errors="coerce").fillna(0).sum())
+                tot_e12 = float(pd.to_numeric(anc_curr["ANC_1st_Under_12w"], errors="coerce").fillna(0).sum())
+                tot_a4 = float(pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0).sum())
+                tot_ad = float(pd.to_numeric(anc_curr["ANC_Adol_10_14"], errors="coerce").fillna(0).sum() + pd.to_numeric(anc_curr["ANC_Adol_15_19"], errors="coerce").fillna(0).sum())
+                tot_sy = float(pd.to_numeric(anc_curr["ANC_Syphilis_Tested"], errors="coerce").fillna(0).sum())
+                denom_a1 = max(1.0, float(tot_anc1))
+                anc_early_pct = tot_e12 / denom_a1 * 100.0
+                anc4_pct = tot_a4 / denom_a1 * 100.0
+                anc_adol_pct = tot_ad / denom_a1 * 100.0
+                anc_syph_pct = tot_sy / denom_a1 * 100.0
+                anc_curr["n1"] = pd.to_numeric(anc_curr["ANC_1st_New"], errors="coerce").fillna(0)
+                anc_curr["a4_r"] = pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0) / anc_curr["n1"].replace(0, np.nan) * 100.0
+                anc_curr["sy_r"] = pd.to_numeric(anc_curr["ANC_Syphilis_Tested"], errors="coerce").fillna(0) / anc_curr["n1"].replace(0, np.nan) * 100.0
+                low_anc4_facs = anc_curr[(anc_curr["n1"] >= 5) & (anc_curr["a4_r"] < 50.0)]["facility_name"].tolist()
+                if low_anc4_facs:
+                    action_items.append({
+                        "Owner": "Medical Mentors & CHWs",
+                        "Priority": "High",
+                        "Focus Area": "ANC 4+ Retention Drop-Off (<50%)",
+                        "Facilities": ", ".join(low_anc4_facs[:6]),
+                        "Action Required": "Audit ANC appointment tracking and deploy CHW defaulter tracing for mothers missing 3rd and 4th ANC visits.",
+                    })
+                low_syph_facs = anc_curr[(anc_curr["n1"] >= 5) & (anc_curr["sy_r"] < 80.0)]["facility_name"].tolist()
+                if low_syph_facs:
+                    action_items.append({
+                        "Owner": "Medical Mentors & Lab",
+                        "Priority": "High",
+                        "Focus Area": "ANC Syphilis Screening Gap (<80%)",
+                        "Facilities": ", ".join(low_syph_facs[:6]),
+                        "Action Required": "Verify HIV/Syphilis Duo rapid test kit availability at MCH points of care and enforce 1st-visit testing.",
+                    })
+        except Exception:
+            pass
+
     # Rolling 12-Month Patient Satisfaction Survey (PSS) Integration
     pss_bundle = pssa.get_pss_me_analytics(force_live=False)
     pss_mean = 0.0
@@ -427,6 +470,11 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
         "pv_mom_pct": pv_mom_pct,
         "pv_yoy_pct": pv_yoy_pct,
         "tot_del": tot_del,
+        "tot_anc1": tot_anc1,
+        "anc_early_pct": anc_early_pct,
+        "anc4_pct": anc4_pct,
+        "anc_adol_pct": anc_adol_pct,
+        "anc_syph_pct": anc_syph_pct,
         "tot_lb": tot_lb,
         "tot_fsb": tot_fsb,
         "tot_msb": tot_msb,

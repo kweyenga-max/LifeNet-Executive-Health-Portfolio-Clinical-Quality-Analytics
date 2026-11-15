@@ -936,8 +936,9 @@ def load_all_data():
 
     # Merge live KHIS PV & KPI data (rolling LAST_MONTH) without altering QSC or Finance
     try:
-        from scripts.khis_adapter import get_live_pv_and_kpi_frames
+        from scripts.khis_adapter import get_live_pv_and_kpi_frames, get_live_anc_frame
         df_pv_live, df_kpi_live_wide = get_live_pv_and_kpi_frames("IwUxQNFazpx", "IPjuLUsTQHG")
+        df_anc_live = get_live_anc_frame("IPjuLUsTQHG", force_live=bool(st.session_state.pop("_force_khis_sync", False)))
         if not df_pv_live.empty:
             if df_pv is not None and not df_pv.empty:
                 live_periods = set(df_pv_live["Period"].unique())
@@ -1112,7 +1113,42 @@ def load_all_data():
                     })
         return found
 
-    dyn_issues = _run_multisection_dq_audit(df_kpi_2025, "2025") + _run_multisection_dq_audit(df_kpi_2026, "2026")
+    def _run_anc_dq_audit():
+        anc_found = []
+        anc_snap = os.path.join("data", "khis_anc_snapshot.csv.gz")
+        if not os.path.exists(anc_snap):
+            return anc_found
+        try:
+            dfa = pd.read_csv(anc_snap, compression="gzip", dtype={"Year": str})
+        except Exception:
+            return anc_found
+        for _, r in dfa.iterrows():
+            yr_s = str(r.get("Year", "")).strip()
+            p_name = str(r.get("period_name", "")).strip()
+            mo_s = p_name.split()[0] if p_name else str(r.get("Month", "")).strip()
+            fc_s = str(r.get("facility_name", "")).strip()
+            if not yr_s or not mo_s or not fc_s:
+                continue
+            n1 = float(pd.to_numeric(r.get("ANC_1st_New", 0), errors="coerce") or 0)
+            e12 = float(pd.to_numeric(r.get("ANC_1st_Under_12w", 0), errors="coerce") or 0)
+            a10 = float(pd.to_numeric(r.get("ANC_Adol_10_14", 0), errors="coerce") or 0)
+            a15 = float(pd.to_numeric(r.get("ANC_Adol_15_19", 0), errors="coerce") or 0)
+            s_tst = float(pd.to_numeric(r.get("ANC_Syphilis_Tested", 0), errors="coerce") or 0)
+            s_pos = float(pd.to_numeric(r.get("ANC_Syphilis_Pos", 0), errors="coerce") or 0)
+            ifas_c = float(pd.to_numeric(r.get("ANC_IFAS_Combined", 0), errors="coerce") or 0)
+            if e12 > n1:
+                anc_found.append({"Year": yr_s, "Month": mo_s, "Facility": fc_s, "Issue Category": "ANC Early Booking Discrepancy", "Description": f"Early 1st ANC <=12w ({int(e12)}) exceeds Total New 1st ANC ({int(n1)})"})
+            if (a10 + a15) > n1:
+                anc_found.append({"Year": yr_s, "Month": mo_s, "Facility": fc_s, "Issue Category": "ANC Adolescent Age Discrepancy", "Description": f"Adolescent 1st ANC 10-19y ({int(a10 + a15)}) exceeds Total New 1st ANC ({int(n1)})"})
+            if s_pos > s_tst:
+                anc_found.append({"Year": yr_s, "Month": mo_s, "Facility": fc_s, "Issue Category": "ANC Syphilis Reactivity Discrepancy", "Description": f"Syphilis Reactive ({int(s_pos)}) exceeds Syphilis Tested ({int(s_tst)})"})
+            if n1 > 0 and s_tst > (n1 * 2):
+                anc_found.append({"Year": yr_s, "Month": mo_s, "Facility": fc_s, "Issue Category": "ANC Syphilis Volume Anomaly", "Description": f"Syphilis Tested ({int(s_tst)}) is >2x New 1st ANC ({int(n1)}) — verify MOH 711 register entry"})
+            if n1 >= 5 and s_tst == 0 and ifas_c == 0:
+                anc_found.append({"Year": yr_s, "Month": mo_s, "Facility": fc_s, "Issue Category": "ANC Preventive Bundle Omission", "Description": f"{int(n1)} New 1st ANC clients recorded with 0 Syphilis tests and 0 IFAS doses — verify ANC register"})
+        return anc_found
+
+    dyn_issues = _run_multisection_dq_audit(df_kpi_2025, "2025") + _run_multisection_dq_audit(df_kpi_2026, "2026") + _run_anc_dq_audit()
     if dyn_issues:
         df_dyn_issues = pd.DataFrame(dyn_issues)
         if df_issues is not None and not df_issues.empty:
