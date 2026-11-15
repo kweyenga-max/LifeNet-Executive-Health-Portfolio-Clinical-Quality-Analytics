@@ -720,6 +720,33 @@ def generate_ddiu_pdf_bytes(period_label: str, base_dir: Path | None = None) -> 
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(kpi_tbl)
+    story.append(Spacer(1, 6))
+
+    anc_strip = [
+        [
+            Paragraph("<b>NEW 1ST ANC CLIENTS</b>", ParagraphStyle("ak1", fontSize=7.0, textColor=colors.HexColor(LN_MUTED))),
+            Paragraph("<b>EARLY BOOKING (&lt;=12W)</b>", ParagraphStyle("ak2", fontSize=7.0, textColor=colors.HexColor(LN_MUTED))),
+            Paragraph("<b>4TH ANC RETENTION (ANC4+)</b>", ParagraphStyle("ak3", fontSize=7.0, textColor=colors.HexColor(LN_MUTED))),
+            Paragraph("<b>ADOLESCENT (10-19Y) &amp; SYPHILIS</b>", ParagraphStyle("ak4", fontSize=7.0, textColor=colors.HexColor(LN_MUTED))),
+        ],
+        [
+            Paragraph(f"<b>{data.get('tot_anc1', 0):,}</b> <font size=7.3 color='{LN_SLATE}'>1st Contacts</font>", s_body),
+            Paragraph(f"<b>{data.get('anc_early_pct', 0.0):.1f}%</b> <font size=7.3 color='{LN_TEAL}'>(Target: 36%)</font>", s_body),
+            Paragraph(f"<b>{data.get('anc4_pct', 0.0):.1f}%</b> <font size=7.3 color='{LN_EMERALD if data.get('anc4_pct', 0.0)>=60 else LN_AMBER}'>Continuum</font>", s_body),
+            Paragraph(f"<b>{data.get('anc_adol_pct', 0.0):.1f}%</b> Adol | <b>{data.get('anc_syph_pct', 0.0):.1f}%</b> Syph", s_body),
+        ],
+    ]
+    anc_tbl = Table(anc_strip, colWidths=[1.78 * inch] * 4)
+    anc_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F0FDF4")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#BBF7D0")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#DCFCE7")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(anc_tbl)
     story.append(Spacer(1, 8))
 
     story.append(Paragraph("1. Portfolio Utilization &amp; Maternal Clinical Trajectory", s_sec))

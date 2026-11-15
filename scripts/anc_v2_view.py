@@ -259,7 +259,6 @@ def render_anc_v2_dashboard(selected_months=None, focus_year="2026", comparison_
         f"{s['ifas_cov_focus']:.1f}% <span style='font-size:14px; color:#0D9488;'>IFAS / Contact</span>",
         f"IPTp2: {s['iptp2_cov_focus']:.1f}% · LLINs: {s['llin_cov_focus']:.1f}%",
         "good" if s["ifas_cov_focus"] >= 75.0 else "warn",
-        "good" if s["ifas_cov_focus"] >= 75.0 else "warn",
         f"<b>Preventive Commodity Fidelity:</b> {int(s['ANC_IFAS_Combined_focus']):,} IFAS doses across {int(s['tot_contacts_focus']):,} total ANC contacts ({ifas_diff:+.1f} pp YoY).",
     )
     st.markdown("---")
