@@ -171,7 +171,7 @@ def render_ddiu_top_section():
             </div>
             <div style="background:linear-gradient(145deg, #0B2244 0%, #0F2C59 100%); border:1px solid #1E40AF; border-top:3.5px solid #38BDF8; border-radius:12px; padding:16px 18px; box-shadow:0 4px 14px rgba(15,44,89,0.14);">
                 <div style="color:#BFDBFE; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em;">Maternity Deliveries</div>
-                <div style="color:#FFFFFF; font-size:26px; font-weight:800; margin:6px 0; letter-spacing:-0.02em;">{tot_del:,}</div>
+                <div style="color:#FFFFFF; font-size:20px; font-weight:800; margin:6px 0; letter-spacing:-0.02em;">{tot_del:,} Del · {tot_anc1:,} 1st ANC</div>
                 <span style="background:#ECFDF5; border:1px solid #A7F3D0; color:#065F46; font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:6px;">
                     LB: {tot_lb:,} · ANC4+: {anc4_pct:.0f}% · Early: {anc_early_pct:.0f}%
                 </span>
