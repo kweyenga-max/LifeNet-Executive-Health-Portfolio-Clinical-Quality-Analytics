@@ -413,127 +413,204 @@ if "authenticated" not in st.session_state:
 
 # 3. Executive Cover Page & Passkey Authentication Gate
 if not st.session_state["authenticated"]:
-    # Executive CSS Styling for Login Screen
-    st.markdown(
-        """
+    import base64
+    from io import BytesIO
+    from PIL import Image, ImageEnhance, ImageFilter
+
+    st.markdown("""
         <style>
-            .stApp {
-                background-color: #0F172A;
-                color: #F8FAFC;
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+            html, body, [class*="css"], .stApp {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+                background-color: #061226 !important;
+                background-image:
+                    radial-gradient(circle at 14% 18%, rgba(200, 16, 46, 0.16) 0%, transparent 42%),
+                    radial-gradient(circle at 86% 22%, rgba(37, 99, 235, 0.22) 0%, transparent 48%),
+                    radial-gradient(circle at 50% 95%, rgba(13, 148, 136, 0.14) 0%, transparent 45%),
+                    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) !important;
+                background-size: 100% 100%, 100% 100%, 100% 100%, 44px 44px, 44px 44px !important;
+                color: #F8FAFC !important;
             }
-            .brand-card {
-                background: linear-gradient(135deg, #0A2540 0%, #1E293B 100%);
-                padding: 32px;
-                border-radius: 16px;
-                border-left: 6px solid #E61C24;
-                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-                margin-bottom: 24px;
+            #MainMenu, header[data-testid="stHeader"], footer {
+                visibility: hidden !important;
+                height: 0 !important;
             }
-            .brand-logo {
-                color: #E61C24;
-                font-size: 42px;
-                font-weight: 900;
-                letter-spacing: 2px;
-                margin: 0 0 10px 0;
-                line-height: 1;
+            .block-container {
+                padding-top: 2.0rem !important;
+                padding-bottom: 1.5rem !important;
+                max-width: 1380px !important;
             }
-            .brand-mission {
-                color: #FFFFFF;
-                font-size: 22px;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin: 0 0 12px 0;
-                line-height: 1.3;
+            /* Bottom half of Left Executive Sign-In Card */
+            div[data-testid="stForm"] {
+                background: #FFFFFF !important;
+                border: 1px solid rgba(255, 255, 255, 0.16) !important;
+                border-top: none !important;
+                border-radius: 0 0 20px 20px !important;
+                padding: 34px 38px 32px 38px !important;
+                box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.55) !important;
+                margin-top: -16px !important;
+                min-height: 368px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
             }
-            .brand-subtext {
-                color: #94A3B8;
-                font-size: 14px;
-                margin: 0;
+            .stTextInput > div > div {
+                background-color: #F1F5F9 !important;
+                border: 1.5px solid #CBD5E1 !important;
+                border-radius: 12px !important;
+                overflow: hidden !important;
             }
-            .auth-container {
-                background: rgba(30, 41, 59, 0.7);
-                backdrop-filter: blur(12px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                padding: 28px;
-                border-radius: 16px;
-                box-shadow: 0 20px 30px rgba(0, 0, 0, 0.4);
+            .stTextInput > div > div:focus-within {
+                background-color: #FFFFFF !important;
+                border-color: #0F2C59 !important;
+                box-shadow: 0 0 0 4px rgba(15, 44, 89, 0.14) !important;
             }
             .stTextInput > div > div > input {
-                background-color: #0F172A !important;
-                color: #FFFFFF !important;
-                border: 1px solid #334155 !important;
-                border-radius: 8px !important;
-                padding: 12px 16px !important;
-            }
-            .stTextInput > div > div > input:focus {
-                border-color: #E61C24 !important;
-                box-shadow: 0 0 0 2px rgba(230, 28, 36, 0.2) !important;
-            }
-            .stButton > button {
-                background: linear-gradient(90deg, #E61C24 0%, #C1121F 100%) !important;
-                color: #FFFFFF !important;
-                font-weight: 700 !important;
-                font-size: 16px !important;
+                background-color: transparent !important;
+                color: #0F172A !important;
                 border: none !important;
-                border-radius: 8px !important;
-                padding: 12px 24px !important;
-                box-shadow: 0 4px 14px rgba(230, 28, 36, 0.4) !important;
+                padding: 15px 18px !important;
+                font-size: 15.5px !important;
+                font-weight: 500 !important;
+            }
+            .stTextInput > div > div > input::placeholder {
+                color: #64748B !important;
+            }
+            .stTextInput button {
+                background-color: #E2E8F0 !important;
+                color: #1E293B !important;
+                border-left: 1px solid #CBD5E1 !important;
+                padding: 0 14px !important;
+            }
+            .stTextInput button svg {
+                fill: #1E293B !important;
+            }
+            div[data-testid="stFormSubmitButton"] > button {
+                background: linear-gradient(90deg, #C8102E 0%, #9E0B22 100%) !important;
+                color: #FFFFFF !important;
+                font-weight: 800 !important;
+                font-size: 15px !important;
+                letter-spacing: 0.08em !important;
+                border: none !important;
+                border-radius: 12px !important;
+                padding: 15px 28px !important;
+                box-shadow: 0 10px 24px rgba(200, 16, 46, 0.36) !important;
+                transition: all 0.2s ease !important;
+            }
+            div[data-testid="stFormSubmitButton"] > button:hover {
+                transform: translateY(-1px) !important;
+                box-shadow: 0 14px 28px rgba(200, 16, 46, 0.48) !important;
             }
         </style>
-    """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
-    col_left, col_right = st.columns([1.2, 1.8], gap="large")
+    # Top Institutional Command Header Bar
+    st.markdown("""
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:0 4px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span style="width:11px;height:11px;border-radius:50%;background:#C8102E;box-shadow:0 0 12px #C8102E;display:inline-block;"></span>
+                <span style="color:#F8FAFC;font-size:13px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">LifeNet International Kenya · M&amp;E Intelligence Centre</span>
+            </div>
+            <div style="background:rgba(15,44,89,0.75);backdrop-filter:blur(10px);border:1px solid rgba(148,163,184,0.28);border-radius:24px;padding:6px 16px;font-size:12px;font-weight:600;color:#E2E8F0;display:flex;align-items:center;gap:8px;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#10B981;box-shadow:0 0 8px #10B981;display:inline-block;"></span>
+                <span>KHIS &amp; MoniTrac Pipelines Connected</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    col_left, col_right = st.columns([1.05, 1.35], gap="large")
 
     with col_left:
-        st.markdown(
-            """
-            <div class="brand-card">
-                <div class="brand-logo">LN</div>
-                <div class="brand-mission">Transforming Health Care Across Africa</div>
-                <p class="brand-subtext">Executive Analytics & Health Facility Operational Intelligence Portal</p>
+        st.markdown("""
+            <div style="background:linear-gradient(135deg,#0B2244 0%,#163E7A 100%);padding:36px 38px 30px 38px;border-radius:20px 20px 0 0;border-top:6px solid #C8102E;border-left:1px solid rgba(255,255,255,0.14);border-right:1px solid rgba(255,255,255,0.14);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span style="background:#C8102E;color:#FFFFFF;font-size:22px;font-weight:900;letter-spacing:1.5px;padding:7px 15px;border-radius:10px;box-shadow:0 6px 14px rgba(200,16,46,0.4);">LN</span>
+                        <span style="color:#FFFFFF;font-size:15px;font-weight:800;letter-spacing:0.05em;line-height:1.2;">LIFENET<br/><span style="color:#93C5FD;font-size:10.5px;font-weight:600;letter-spacing:0.14em;">INTERNATIONAL</span></span>
+                    </div>
+                    <span style="background:rgba(255,255,255,0.12);color:#F8FAFC;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.22);">Kenya Portfolio</span>
+                </div>
+                <div style="color:#FFFFFF;font-size:26px;font-weight:800;letter-spacing:-0.015em;line-height:1.24;margin-bottom:10px;">Transforming Health Care Across Africa</div>
+                <p style="color:#CBD5E1;font-size:14px;line-height:1.55;margin:0;">Executive Clinical Quality, Facility Utilization &amp; Financial Sustainability Portal</p>
             </div>
-        """,
-            unsafe_allow_html=True,
-        )
+        """, unsafe_allow_html=True)
 
-        with st.container():
-            st.markdown('<div class="auth-container">', unsafe_allow_html=True)
-            st.markdown(
-                "<h4 style='color: #F8FAFC; margin-bottom: 16px;'>Executive Access Portal</h4>",
-                unsafe_allow_html=True,
-            )
-
-            passkey = st.text_input(
-                "Passkey",
-                type="password",
-                placeholder="Enter executive authorization key...",
-                label_visibility="collapsed",
-                key="exec_passkey",
-            )
-
-            st.markdown("<br/>", unsafe_allow_html=True)
-
-            if st.button("UNLOCK PORTAL", use_container_width=True):
+        with st.form("exec_login_form", clear_on_submit=False):
+            st.markdown("""
+                <div style="margin-bottom:16px;">
+                    <div style="color:#0F2C59;font-size:20px;font-weight:800;margin-bottom:4px;">Executive Access Portal</div>
+                    <div style="color:#475569;font-size:13.5px;">Sign in with your authorized leadership or M&amp;E passkey</div>
+                </div>
+            """, unsafe_allow_html=True)
+            passkey = st.text_input("Authorization Key", type="password", placeholder="Enter executive authorization key...", label_visibility="collapsed", key="exec_passkey")
+            st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+            if st.form_submit_button("UNLOCK PORTAL  →", use_container_width=True):
                 if passkey == "LifeNet2026!":
                     st.session_state["authenticated"] = True
                     st.rerun()
                 else:
-                    st.error("❌ Authorization Failed: Invalid Passkey")
-            st.markdown("</div>", unsafe_allow_html=True)
+                    st.error("❌ Authorization Failed: Invalid Executive Key")
+            st.markdown("""
+                <div style="margin-top:26px;padding-top:16px;border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:center;color:#64748B;font-size:12px;">
+                    <span>🛡️ End-to-End Encrypted Session</span>
+                    <span style="font-weight:700;color:#0F2C59;">FY2026 Release</span>
+                </div>
+            """, unsafe_allow_html=True)
 
     with col_right:
         image_path = "Gemini_Generated_Image_w39fd1w39fd1w39f.jpeg"
+        if not os.path.exists(image_path):
+            image_path = os.path.join("assets", image_path)
+        img_b64 = ""
         if os.path.exists(image_path):
-            st.image(image_path, use_container_width=True)
-        else:
-            fallback_path = os.path.join("assets", image_path)
-            if os.path.exists(fallback_path):
-                st.image(fallback_path, use_container_width=True)
-            else:
-                st.warning(f"Image not found at path: {image_path}")
+            with Image.open(image_path) as im:
+                im = im.convert("RGB")
+                w, h = im.size
+                cropped = im.crop((int(w * 0.37), int(h * 0.03), int(w * 0.98), int(h * 0.93)))
+                # Lanczos upscale + crisp editorial sharpening & contrast restoration
+                target_w = 1400
+                target_h = int(cropped.height * (target_w / cropped.width))
+                enhanced = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                enhanced = enhanced.filter(ImageFilter.UnsharpMask(radius=1.4, percent=135, threshold=3))
+                enhanced = ImageEnhance.Sharpness(enhanced).enhance(1.30)
+                enhanced = ImageEnhance.Contrast(enhanced).enhance(1.07)
+                enhanced = ImageEnhance.Color(enhanced).enhance(1.05)
+                buf = BytesIO()
+                enhanced.save(buf, format="PNG", optimize=True)
+                img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        hero_img_html = f'<img src="data:image/png;base64,{img_b64}" style="width:100%;height:406px;object-fit:cover;object-position:center 15%;display:block;" />' if img_b64 else '<div style="height:406px;background:#0F2C59;"></div>'
+        st.markdown(f"""
+            <div style="background:#FFFFFF;border:1px solid rgba(255,255,255,0.18);border-radius:20px;overflow:hidden;box-shadow:0 32px 64px -16px rgba(0,0,0,0.55);">
+                <div style="position:relative;">
+                    {hero_img_html}
+                    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,34,68,0.02) 52%,rgba(11,34,68,0.94) 100%);display:flex;flex-direction:column;justify-content:flex-end;padding:28px 32px;">
+                        <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;">
+                            <span style="background:#C8102E;width:24px;height:3px;display:inline-block;border-radius:2px;"></span>
+                            <span style="color:#93C5FD;font-size:11.5px;font-weight:800;letter-spacing:0.13em;text-transform:uppercase;">Decision Intelligence &amp; DDIU Command Center</span>
+                        </div>
+                        <div style="color:#FFFFFF;font-size:22px;font-weight:800;line-height:1.3;letter-spacing:-0.01em;">Data-Driven Quality Improvement Across Partner Health Facilities</div>
+                    </div>
+                </div>
+                <div style="padding:24px 30px 26px 30px;background:#FFFFFF;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-top:4px solid #0F2C59;border-radius:12px;padding:15px 16px;">
+                        <div style="color:#64748B;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Network Scope</div>
+                        <div style="color:#0F2C59;font-size:18px;font-weight:800;margin-top:4px;white-space:nowrap;">38 Facilities</div>
+                        <div style="color:#475569;font-size:12px;margin-top:3px;">Active Kenya Portfolio</div>
+                    </div>
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-top:4px solid #0D9488;border-radius:12px;padding:15px 16px;">
+                        <div style="color:#64748B;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Live Pipelines</div>
+                        <div style="color:#0F2C59;font-size:18px;font-weight:800;margin-top:4px;white-space:nowrap;">KHIS + MoniTrac</div>
+                        <div style="color:#475569;font-size:12px;margin-top:3px;">Automated Sync &amp; DDIU</div>
+                    </div>
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-top:4px solid #C8102E;border-radius:12px;padding:15px 16px;">
+                        <div style="color:#64748B;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">4 Core Pillars</div>
+                        <div style="color:#0F2C59;font-size:18px;font-weight:800;margin-top:4px;white-space:nowrap;">360° Analytics</div>
+                        <div style="color:#475569;font-size:12px;margin-top:3px;">PV · QSC · Finance · PSS</div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
     st.stop()
 st.set_page_config(
