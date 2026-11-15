@@ -266,3 +266,141 @@ def get_live_pv_and_kpi_frames(pv_uid="IwUxQNFazpx", kpi_uid="IPjuLUsTQHG", targ
         df_kpi_live_wide = pd.DataFrame(columns=["organisationunitname"])
 
     return df_pv_live, df_kpi_live_wide
+
+
+ANC_SNAPSHOT_PATH = os.path.join(DATA_DIR, "khis_anc_snapshot.csv.gz")
+
+ANC_DATA_ELEMENTS = {
+    "f9vesk5d4IY": "ANC_1st_New",
+    "etbuJ3chcZL": "ANC_1st_Under_12w",
+    "Fz0LzxMT1vV": "ANC_4th_Completed",
+    "cKr5133RFuN": "ANC_8th_Completed",
+    "hxXwYIgT8rI": "ANC_Revisits",
+    "chMsCa5zcn7": "ANC_Adol_10_14",
+    "uHBmKxktYk0": "ANC_Adol_15_19",
+    "T6B5TXBX3Mj": "ANC_Youth_20_24",
+    "uvBuzBj0AbL": "ANC_Syphilis_Tested",
+    "zIiDTYhg8K5": "ANC_Syphilis_Pos",
+    "NTLdyLadTk1": "ANC_IFAS_Combined",
+    "QgjmGMoIcGu": "ANC_Iron_Only",
+    "JbcvbCEBnu6": "ANC_Folic_Only",
+    "gAKCshSgSH3": "ANC_IPTp1",
+    "EHGBrVPiG3N": "ANC_IPTp2",
+    "N931F2wuVVO": "ANC_IPTp3",
+    "eIvn8VgI5Zx": "ANC_LLIN",
+}
+
+
+def fetch_khis_anc_dataset(ref_viz_uid="IPjuLUsTQHG", periods=None, timeout=25):
+    base_url, username, password = _get_khis_credentials()
+    if not base_url or not username or not password:
+        return pd.DataFrame()
+
+    try:
+        meta_resp = requests.get(
+            f"{base_url}/api/visualizations/{ref_viz_uid}.json",
+            params={
+                "fields": "organisationUnits[id],userOrganisationUnit,userOrganisationUnitChildren,userOrganisationUnitGrandChildren"
+            },
+            auth=(username, password),
+            verify=False,
+            timeout=timeout,
+        )
+        if meta_resp.status_code != 200:
+            return pd.DataFrame()
+
+        _, ou_items, _ = _extract_dimensions(meta_resp.json())
+        if not ou_items:
+            return pd.DataFrame()
+
+        if periods is None:
+            # Always include full 2025 and 2026 through current/latest month
+            today = date.today()
+            max_m = 12 if today.year > 2026 else today.month
+            periods = [f"2025{m:02d}" for m in range(1, 13)] + [f"2026{m:02d}" for m in range(1, max_m + 1)]
+
+        dx_list = list(ANC_DATA_ELEMENTS.keys())
+        dimensions = [
+            f"dx:{';'.join(dx_list)}",
+            f"ou:{';'.join(ou_items)}",
+            f"pe:{';'.join(periods)}",
+        ]
+        analytics_params = [
+            ("displayProperty", "NAME"),
+            ("skipMeta", "false"),
+            ("hierarchyMeta", "false"),
+        ] + [("dimension", d) for d in dimensions]
+
+        resp = requests.get(
+            f"{base_url}/api/analytics.json",
+            params=analytics_params,
+            auth=(username, password),
+            verify=False,
+            timeout=timeout,
+        )
+        if resp.status_code != 200:
+            return pd.DataFrame()
+
+        data = resp.json()
+        headers = [h["name"] for h in data.get("headers", [])]
+        df_raw = pd.DataFrame(data.get("rows", []), columns=headers)
+        if df_raw.empty:
+            return pd.DataFrame()
+
+        meta_items = data.get("metaData", {}).get("items", {})
+        df_raw["metric_key"] = df_raw["dx"].map(lambda uid: ANC_DATA_ELEMENTS.get(uid, uid))
+        df_raw["facility_name"] = df_raw["ou"].map(lambda uid: meta_items.get(uid, {}).get("name", uid)).astype(str).str.strip()
+        df_raw["period_id"] = df_raw["pe"].astype(str).str.strip()
+        df_raw["period_name"] = df_raw["pe"].map(lambda uid: meta_items.get(uid, {}).get("name", uid)).astype(str).str.strip()
+        df_raw["value"] = pd.to_numeric(df_raw["value"], errors="coerce").fillna(0)
+
+        df_raw = df_raw[~df_raw["facility_name"].str.lower().str.contains("total|subtotal", na=False)]
+        df_raw["Year"] = df_raw["period_id"].str[:4]
+        df_raw["MonthNum"] = pd.to_numeric(df_raw["period_id"].str[4:6], errors="coerce").fillna(0).astype(int)
+        month_map = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+        df_raw["Month"] = df_raw["MonthNum"].map(month_map).fillna("")
+
+        piv = (
+            df_raw.pivot_table(
+                index=["facility_name", "Year", "MonthNum", "Month", "period_id", "period_name"],
+                columns="metric_key",
+                values="value",
+                aggfunc="sum",
+                fill_value=0,
+            )
+            .reset_index()
+        )
+        piv.columns.name = None
+        for col_key in ANC_DATA_ELEMENTS.values():
+            if col_key not in piv.columns:
+                piv[col_key] = 0.0
+        return piv.sort_values(["facility_name", "Year", "MonthNum"]).reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_live_anc_frame(ref_viz_uid="IPjuLUsTQHG", force_live=False):
+    if not force_live and os.path.exists(ANC_SNAPSHOT_PATH):
+        try:
+            df_snap = pd.read_csv(ANC_SNAPSHOT_PATH, compression="gzip", dtype={"Year": str, "period_id": str})
+            if not df_snap.empty:
+                return df_snap
+        except Exception:
+            pass
+
+    df_anc = fetch_khis_anc_dataset(ref_viz_uid=ref_viz_uid)
+    if not df_anc.empty:
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            df_anc.to_csv(ANC_SNAPSHOT_PATH, index=False, compression={"method": "gzip", "mtime": 0})
+        except Exception:
+            pass
+        return df_anc
+
+    if os.path.exists(ANC_SNAPSHOT_PATH):
+        try:
+            return pd.read_csv(ANC_SNAPSHOT_PATH, compression="gzip", dtype={"Year": str, "period_id": str})
+        except Exception:
+            pass
+    return pd.DataFrame()
