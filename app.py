@@ -2670,7 +2670,7 @@ elif active_tab == "📑 Monthly DDIU Brief":
 
     with anc_c2:
         af_ddiu = ddiu_data.get("anc_fac_df", pd.DataFrame())
-        sub_af_web = af_ddiu[af_ddiu["ANC1"] >= 5].dropna(subset=["ANC4_Pct"]).sort_values("ANC4_Pct", ascending=True).head(10) if not af_ddiu.empty else pd.DataFrame()
+        sub_af_web = af_ddiu[af_ddiu["ANC1"] >= 1].dropna(subset=["ANC4_Pct"]).sort_values("ANC4_Pct", ascending=True).head(10) if not af_ddiu.empty else pd.DataFrame()
         if not sub_af_web.empty:
             bar_cols = ["#DC2626" if v < 50.0 else ("#D97706" if v < 65.0 else "#0D9488") for v in sub_af_web["ANC4_Pct"]]
             fig_ddiu_anc_out = go.Figure(
@@ -2692,7 +2692,7 @@ elif active_tab == "📑 Monthly DDIU Brief":
             )
             st.plotly_chart(fig_ddiu_anc_out, use_container_width=True)
         else:
-            st.info(f"No facilities with ≥5 1st ANC contacts in {ddiu_period} to rank ANC4+ retention.")
+            st.info(f"No facilities with ≥1 1st ANC contacts in {ddiu_period} to rank ANC4+ retention.")
 
     st.markdown("#### 🎯 Role-Based DDIU Action Plan (M&E, Medical & Management Mentors)")
     if not ddiu_data["action_df"].empty:

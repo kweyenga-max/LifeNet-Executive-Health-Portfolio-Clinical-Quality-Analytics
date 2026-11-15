@@ -387,7 +387,7 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
                 tot_a4 = int(pd.to_numeric(anc_curr["ANC_4th_Completed"], errors="coerce").fillna(0).sum())
                 tot_ad = float(pd.to_numeric(anc_curr["ANC_Adol_10_14"], errors="coerce").fillna(0).sum() + pd.to_numeric(anc_curr["ANC_Adol_15_19"], errors="coerce").fillna(0).sum())
                 tot_sy = int(pd.to_numeric(anc_curr["ANC_Syphilis_Tested"], errors="coerce").fillna(0).sum())
-                tot_ifas = int(pd.to_numeric(anc_curr.get("ANC_IFAS", 0), errors="coerce").fillna(0).sum())
+                tot_ifas = int(pd.to_numeric(anc_curr.get("ANC_IFAS_Combined", 0), errors="coerce").fillna(0).sum())
                 denom_a1 = max(1.0, float(tot_anc1))
                 anc_early_pct = tot_e12 / denom_a1 * 100.0
                 anc4_pct = tot_a4 / denom_a1 * 100.0
@@ -690,7 +690,7 @@ def _render_charts_png(data: dict) -> dict[str, io.BytesIO]:
     # Chart 6: Facility ANC4+ Retention Outliers (Bottom 8 Active Sites with >=5 1st ANC)
     af = data.get("anc_fac_df", pd.DataFrame())
     if not af.empty:
-        sub_af = af[af["ANC1"] >= 5].dropna(subset=["ANC4_Pct"]).sort_values("ANC4_Pct", ascending=True).head(8)
+        sub_af = af[af["ANC1"] >= 1].dropna(subset=["ANC4_Pct"]).sort_values("ANC4_Pct", ascending=True).head(8)
     else:
         sub_af = pd.DataFrame()
     if not sub_af.empty:
