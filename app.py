@@ -2489,59 +2489,8 @@ elif active_tab == "💼 Financial Performance":
 # TAB 7: MONTHLY DDIU & M&E EXECUTIVE BRIEF
 # ---------------------------------------------------------
 elif active_tab == "📑 Monthly DDIU Brief":
-    st.markdown("### 📑 Monthly Data Demand & Information Use (DDIU) Executive Brief")
-    st.caption("Synthesizing KHIS Patient Visits, MOH 711 Maternal/Newborn KPIs, DQA Audits & MoniTrac Financials across 38 Active Facilities.")
-
-    avail_periods = ddiu.get_available_reporting_periods()
-    default_p = ddiu.default_ddiu_period()
-    default_idx = avail_periods.index(default_p) if default_p in avail_periods else len(avail_periods) - 1
-
-    c_p1, c_p2 = st.columns([1.4, 1.0])
-    with c_p1:
-        ddiu_period = st.selectbox(
-            "Select Reporting Month (15th-of-Month Cycle):",
-            options=avail_periods,
-            index=default_idx,
-            key="ddiu_period_select",
-        )
-    ddiu_data = ddiu.build_ddiu_dataset(ddiu_period)
-    pdf_bytes = ddiu.generate_ddiu_pdf_bytes(ddiu_period)
-
-    with c_p2:
-        st.markdown("<div style='height: 26px;'></div>", unsafe_allow_html=True)
-        st.download_button(
-            label=f"📥 Download LifeNet DDIU PDF ({ddiu_period})",
-            data=pdf_bytes,
-            file_name=f"LifeNet_DDIU_Report_{ddiu_period.replace(' ', '_')}.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
-
-    st.markdown("---")
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric(
-        "Total Patient Visits",
-        f"{int(ddiu_data['tot_pv']):,}",
-        f"{ddiu_data['pv_mom_pct']:+.1f}% MoM | {ddiu_data['pv_yoy_pct']:+.1f}% YoY",
-    )
-    m2.metric(
-        "Maternity Deliveries",
-        f"{ddiu_data['tot_del']:,}",
-        f"{ddiu_data['tot_lb']:,} Live Births | {ddiu_data['tot_fsb'] + ddiu_data['tot_msb']} SB",
-    )
-    m3.metric(
-        "Reporting Completeness",
-        f"KHIS {ddiu_data['khis_reporting']}/{ddiu_data['total_facilities']}",
-        f"Finance {ddiu_data['fin_reporting']}/{ddiu_data['total_facilities']} HFs",
-    )
-    m4.metric(
-        "Network Cost Coverage",
-        f"{ddiu_data['cost_coverage']:.1f}%",
-        f"Net KES {ddiu_data['tot_net']:,.0f}",
-    )
-
-    st.markdown("---")
+    from scripts import ddiu_header_view as dhv
+    ddiu_period, ddiu_data = dhv.render_ddiu_top_section()
 
     ch1, ch2 = st.columns(2)
     trend_df = ddiu_data["trend_df"]
