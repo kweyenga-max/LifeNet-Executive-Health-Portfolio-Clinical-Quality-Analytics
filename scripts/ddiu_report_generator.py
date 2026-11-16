@@ -104,6 +104,14 @@ def default_ddiu_period(base_dir: Path | None = None, ref_date: datetime | None 
     return periods[-1]
 
 
+
+def _load_starlink_snapshot() -> pd.DataFrame:
+    try:
+        from scripts.weekly_connectivity_report import pull_merged_telemetry
+        return pull_merged_telemetry()
+    except Exception:
+        return pd.DataFrame()
+
 def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
     base_dir = base_dir or Path(__file__).resolve().parent.parent
     prev_label = _prev_month_label(period_label)
@@ -510,6 +518,7 @@ def build_ddiu_dataset(period_label: str, base_dir: Path | None = None) -> dict:
         "well_df": well_df,
         "follow_up_df": follow_up_df,
         "action_df": pd.DataFrame(action_items),
+        "starlink_df": _load_starlink_snapshot(),
     }
 
 
@@ -976,6 +985,69 @@ def generate_ddiu_pdf_bytes(period_label: str, base_dir: Path | None = None) -> 
             ("PADDING", (0, 0), (-1, -1), 5),
         ]))
         story.append(at)
+
+    sl_df = data.get("starlink_df")
+    if sl_df is not None and not sl_df.empty:
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("7. Starlink &amp; Facility Network Connectivity (StarEDGE + UniFi)", s_sec))
+        story.append(HRFlowable(width="100%", thickness=1, color=c_navy, spaceAfter=6))
+
+        pool_cap_gb = float(sl_df["Share Cap (GB)"].sum())
+        pool_cap_tb = pool_cap_gb / 1000.0
+        used_gb = float(sl_df["Current Month (GB)"].sum())
+        used_tb = used_gb / 1000.0
+        prev_gb = float(sl_df["Previous Month (GB)"].sum())
+        pct_pool = (used_gb / pool_cap_gb * 100.0) if pool_cap_gb > 0 else 0.0
+        online_cnt = int((sl_df["Status"].astype(str).str.upper() == "ONLINE").sum())
+        top_sl = sl_df.iloc[0]
+        tot_clients = int(sl_df["Active Clients"].fillna(0).sum()) if "Active Clients" in sl_df.columns else 0
+
+        story.append(
+            Paragraph(
+                f"Across all <b>{len(sl_df)} Starlink-equipped facilities</b> (<b>{online_cnt}/{len(sl_df)} Online</b>; "
+                f"<b>{tot_clients}</b> active UniFi client devices), cumulative pool consumption stands at "
+                f"<b>{used_gb:,.2f} GB ({used_tb:.2f} TB)</b>—representing <b>{pct_pool:.1f}%</b> of the "
+                f"<b>{pool_cap_tb:.2f} TB ({pool_cap_gb:,.0f} GB)</b> monthly pooled cap (vs. {prev_gb:,.1f} GB prior month). "
+                f"Highest consumer: <b>{top_sl['Facility']}</b> at <b>{top_sl['Current Month (GB)']:.1f} GB</b> "
+                f"({top_sl['% Share']:.1f}% of its 307.2 GB reference share).",
+                s_body,
+            )
+        )
+        story.append(Spacer(1, 4))
+
+        sl_rows = [[
+            Paragraph("Code", s_cell_hdr),
+            Paragraph("Facility Name", s_cell_hdr),
+            Paragraph("Status", s_cell_hdr),
+            Paragraph("Curr Month (GB)", s_cell_hdr),
+            Paragraph("Prev Month (GB)", s_cell_hdr),
+            Paragraph("% Share", s_cell_hdr),
+            Paragraph("Clients", s_cell_hdr),
+        ]]
+        for _, r in sl_df.iterrows():
+            st_txt = str(r.get("Status", "ONLINE")).upper()
+            st_col = LN_EMERALD if st_txt == "ONLINE" else LN_CRIMSON
+            clients_val = int(r["Active Clients"]) if "Active Clients" in r and pd.notna(r["Active Clients"]) else 0
+            sl_rows.append([
+                Paragraph(str(r["Site Code"]), s_cell),
+                Paragraph(f"<b>{r['Facility']}</b>", s_cell),
+                Paragraph(f"<font color='{st_col}'><b>{st_txt}</b></font>", s_cell),
+                Paragraph(f"{r['Current Month (GB)']:,.2f}", s_cell),
+                Paragraph(f"{r['Previous Month (GB)']:,.2f}", s_cell),
+                Paragraph(f"{r['% Share']:.1f}%", s_cell),
+                Paragraph(f"{clients_val}", s_cell),
+            ])
+        slt = Table(sl_rows, colWidths=[0.75 * inch, 2.25 * inch, 0.75 * inch, 0.95 * inch, 0.95 * inch, 0.75 * inch, 0.75 * inch])
+        slt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(LN_NAVY)),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(slt)
 
     doc.build(story)
     buf.seek(0)

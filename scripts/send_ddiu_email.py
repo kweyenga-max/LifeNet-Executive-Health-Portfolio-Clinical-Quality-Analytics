@@ -30,6 +30,21 @@ def send_ddiu_report_email(period_label: str | None = None, recipients_override:
     if isinstance(recipients, str):
         recipients = [recipients]
 
+    sl_df = data.get("starlink_df")
+    if sl_df is not None and not sl_df.empty:
+        sl_used = float(sl_df["Current Month (GB)"].sum())
+        sl_cap = float(sl_df["Share Cap (GB)"].sum())
+        sl_pct = (sl_used / sl_cap * 100.0) if sl_cap > 0 else 0.0
+        sl_on = int((sl_df["Status"].astype(str).str.upper() == "ONLINE").sum())
+        sl_txt_line = f"- Starlink Connectivity Pool: {sl_used:,.1f} GB / {sl_cap/1000.0:.2f} TB ({sl_pct:.1f}% used | {sl_on}/{len(sl_df)} online)\n"
+        sl_html_row = (
+            f'<tr><td style="padding: 10px; border: 1px solid #E2E8F0;"><b>Starlink Connectivity Pool</b></td>'
+            f'<td style="padding: 10px; border: 1px solid #E2E8F0;"><b>{sl_used:,.1f} GB</b> ({sl_pct:.1f}% of {sl_cap/1000.0:.2f} TB) &nbsp;|&nbsp; <b>{sl_on}/{len(sl_df)}</b> Sites Online</td></tr>'
+        )
+    else:
+        sl_txt_line = ""
+        sl_html_row = ""
+
     msg = EmailMessage()
     msg["Subject"] = f"LifeNet Kenya | Monthly DDIU & M&E Executive Brief — {period_label}"
     msg["From"] = f"LifeNet M&E Portal <{cfg['sender_email']}>"
@@ -42,7 +57,7 @@ def send_ddiu_report_email(period_label: str | None = None, recipients_override:
         f"- Total Patient Visits: {int(data['tot_pv']):,} ({data['pv_mom_pct']:+.1f}% MoM | {data['pv_yoy_pct']:+.1f}% YoY)\n"
         f"- Maternity Deliveries: {data['tot_del']:,} ({data['tot_lb']:,} Live Births)\n"
         f"- Network Cost Coverage: {data['cost_coverage']:.1f}% (Net: KES {data['tot_net']:,.0f})\n"
-        f"- Facilities Flagged for Follow-Up: {len(data['follow_up_df'])}\n\n"
+        f"- Facilities Flagged for Follow-Up: {len(data['follow_up_df'])}\n{sl_txt_line}\n"
         f"Full LifeNet-branded Executive PDF Report attached."
     )
 
