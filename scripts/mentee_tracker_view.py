@@ -6,7 +6,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from scipy import stats
 
-from scripts.mentee_tracker_adapter import MENTOR_REGISTRY, MODULE_LABELS, sync_monitrac_mentees
+from scripts.mentee_tracker_adapter import (
+    MENTOR_REGISTRY,
+    MODULE_LABELS,
+    build_facility_coverage_matrix,
+    sync_monitrac_mentees,
+)
 
 
 def _wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -32,7 +37,7 @@ def _kpi_card(title: str, value: str, sub: str, accent: str = "#0F2C59") -> str:
     return f"""
     <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-top:4px solid {accent};border-radius:10px;padding:15px 17px;box-shadow:0 1px 3px rgba(15,23,42,0.05);height:100%;">
         <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#64748B;">{title}</div>
-        <div style="font-size:26px;font-weight:800;color:#0F172A;margin:6px 0 4px 0;line-height:1.15;">{value}</div>
+        <div style="font-size:25px;font-weight:800;color:#0F172A;margin:6px 0 4px 0;line-height:1.15;">{value}</div>
         <div style="font-size:12px;color:#475569;line-height:1.4;">{sub}</div>
     </div>
     """
@@ -49,8 +54,8 @@ def render_mentee_tracker_view():
                 🎓 Mentee &amp; Beneficiary Reach Analytics
             </h2>
             <p style="margin:0;font-size:13.5px;color:#E2E8F0;max-width:980px;">
-                Strict entity-level deduplication across <b>Medical Curriculum (Modules 1–5)</b> and <b>Management Curriculum (Modules 1–4)</b>, spanning
-                <b>Centralized Training</b>, <b>Onsite Mentorship</b>, and <b>Virtual / Ad-hoc Support (WhatsApp &amp; Phone)</b>.
+                Strict entity-level deduplication across <b>Medical Curriculum (Modules 1–5)</b> and <b>Management Curriculum (Modules 1–4)</b>,
+                tracking both <b>Physical In-Person Onsite</b> and <b>Virtual Mentorship Sub-Modalities (WhatsApp, Phone Call, Google Meet/Zoom)</b>.
                 Every mentee is counted under each curriculum and modality they experienced, while counted <b>strictly once</b> in Monthly, Quarterly, and Annual Unique Beneficiary totals.
             </p>
         </div>
@@ -63,7 +68,7 @@ def render_mentee_tracker_view():
         st.warning("No MoniTrac Mentee Tracker records found. Click **🔄 Sync All Live KHIS Data** in the sidebar or run `./sync_khis.sh`.")
         return
 
-    # --- TOP FILTER CONTROLS (5 COLUMNS INCLUDING CURRICULUM) ---
+    # --- TOP FILTER CONTROLS ---
     f1, f2, f3, f4, f5 = st.columns([0.95, 1.15, 1.1, 1.15, 1.25])
     years = sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
     with f1:
@@ -178,6 +183,7 @@ def render_mentee_tracker_view():
             Total_Encounters=("event_uid", "count"),
             Distinct_Modalities=("Modality", "nunique"),
             Modalities_List=("Modality", lambda s: sorted(set(s))),
+            Channels_List=("Delivery_Mode", lambda s: sorted(set(s))),
             Curriculum_Profile=("Curriculum", _person_curriculum_profile),
             Mentors_List=("Mentors", lambda s: ", ".join(sorted({m.strip() for x in s for m in str(x).split(",") if m.strip()}))),
             Cohorts_List=("Mentor_Cohort", lambda s: ", ".join(sorted(set(s)))),
@@ -192,6 +198,13 @@ def render_mentee_tracker_view():
     mean_touches = float(person_df["Total_Encounters"].mean())
     med_touches = float(person_df["Total_Encounters"].median())
     iqr_touches = float(person_df["Total_Encounters"].quantile(0.75) - person_df["Total_Encounters"].quantile(0.25))
+
+    # Session Counts: Physical Onsite vs Virtual
+    total_sessions = int(df_win["Session_UID"].nunique())
+    onsite_sessions = int(df_win[df_win["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique())
+    virtual_sessions = int(df_win[df_win["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique())
+    onsite_touches = int((df_win["Delivery_Mode"] == "Physical / In-Person Onsite").sum())
+    virtual_touches = int((df_win["Delivery_Mode"] == "Virtual Mentorship / Support").sum())
 
     med_unique = int(df_win[df_win["Curriculum"].str.contains("Medical", case=False, na=False)]["beneficiary_uid"].nunique())
     mgt_unique = int(df_win[df_win["Curriculum"].str.contains("Management", case=False, na=False)]["beneficiary_uid"].nunique())
@@ -223,19 +236,19 @@ def render_mentee_tracker_view():
     with k2:
         st.markdown(
             _kpi_card(
-                "Medical Curriculum Reach",
-                f"{med_unique:,}",
-                f"Unique mentees trained/mentored in <b>Med Modules 1–5</b> ({(med_unique/unique_total*100 if unique_total else 0):.1f}% of cohort).",
-                "#1D4ED8",
+                "Mentorship Sessions Held",
+                f"{total_sessions:,}",
+                f"<b>{onsite_sessions:,}</b> Physical Onsite ({onsite_touches:,} touches) · <b>{virtual_sessions:,}</b> Virtual ({virtual_touches:,} touches).",
+                "#0284C7",
             ),
             unsafe_allow_html=True,
         )
     with k3:
         st.markdown(
             _kpi_card(
-                "Management Curriculum Reach",
-                f"{mgt_unique:,}",
-                f"Unique mentees trained/mentored in <b>Mgt Modules 1–4</b> ({dual_curr_unique:,} also completed Medical modules).",
+                "Medical vs. Management Reach",
+                f"{med_unique:,} Med · {mgt_unique:,} Mgt",
+                f"<b>{dual_curr_unique:,}</b> dual-curriculum mentees completed both tracks (Med Mod 1–5 &amp; Mgt Mod 1–4).",
                 "#0D9488",
             ),
             unsafe_allow_html=True,
@@ -263,16 +276,152 @@ def render_mentee_tracker_view():
 
     st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
-    # --- ROW 1: CURRICULUM SEPARATION (MEDICAL VS MANAGEMENT MODULES & MODALITIES) ---
-    c1, c2 = st.columns([1.15, 1.1])
+    # --- ROW 1: PHYSICAL ONSITE VS VIRTUAL MENTORSHIP SESSIONS & VIRTUAL PLATFORM SUB-MODALITIES ---
+    v1, v2 = st.columns([1.05, 1.2])
+
+    with v1:
+        st.markdown("#### 1. Mentorship Sessions: Physical Onsite vs. Virtual")
+        deliv_rows = []
+        for dm in ["Physical / In-Person Onsite", "Virtual Mentorship / Support"]:
+            sub_d = df_win[df_win["Delivery_Mode"] == dm]
+            deliv_rows.append(
+                {
+                    "Channel": dm,
+                    "Coaching Sessions": int(sub_d["Session_UID"].nunique()),
+                    "Mentee Touches": int(len(sub_d)),
+                    "Unique Mentees Reached": int(sub_d["beneficiary_uid"].nunique()),
+                    "Total Hours": round(float(sub_d["Minutes"].sum()) / 60.0, 1),
+                }
+            )
+        df_deliv = pd.DataFrame(deliv_rows)
+        fig_deliv = go.Figure()
+        fig_deliv.add_trace(
+            go.Bar(
+                name="Distinct Coaching Sessions",
+                x=df_deliv["Channel"],
+                y=df_deliv["Coaching Sessions"],
+                marker_color="#0F2C59",
+                text=df_deliv["Coaching Sessions"],
+                textposition="outside",
+            )
+        )
+        fig_deliv.add_trace(
+            go.Bar(
+                name="Unique Mentees Reached",
+                x=df_deliv["Channel"],
+                y=df_deliv["Unique Mentees Reached"],
+                marker_color="#0D9488",
+                text=df_deliv["Unique Mentees Reached"],
+                textposition="outside",
+            )
+        )
+        fig_deliv.add_trace(
+            go.Bar(
+                name="Total Mentee Touches",
+                x=df_deliv["Channel"],
+                y=df_deliv["Mentee Touches"],
+                marker_color="#38BDF8",
+                text=df_deliv["Mentee Touches"],
+                textposition="outside",
+            )
+        )
+        fig_deliv.update_layout(
+            barmode="group",
+            height=340,
+            margin=dict(l=10, r=10, t=20, b=15),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            yaxis_title="Count",
+            plot_bgcolor="#FFFFFF",
+            paper_bgcolor="#FFFFFF",
+        )
+        st.plotly_chart(fig_deliv, use_container_width=True)
+
+    with v2:
+        st.markdown("#### 2. Virtual Mentorship Sub-Modalities (WhatsApp, Phone Call, Google Meet/Zoom)")
+        virt_df = df_win[df_win["Delivery_Mode"] == "Virtual Mentorship / Support"].copy()
+        if virt_df.empty:
+            st.info("No Virtual Mentorship records logged in the selected window.")
+        else:
+            vp_grp = (
+                virt_df.groupby("Virtual_Platform", as_index=False)
+                .agg(
+                    Virtual_Sessions=("Session_UID", "nunique"),
+                    Mentee_Touches=("event_uid", "count"),
+                    Unique_Mentees=("beneficiary_uid", "nunique"),
+                    Total_Minutes=("Minutes", "sum"),
+                )
+                .sort_values("Mentee_Touches", ascending=True)
+            )
+            fig_vp = go.Figure()
+            fig_vp.add_trace(
+                go.Bar(
+                    name="Virtual Sessions",
+                    y=vp_grp["Virtual_Platform"],
+                    x=vp_grp["Virtual_Sessions"],
+                    orientation="h",
+                    marker_color="#7C3AED",
+                    text=vp_grp["Virtual_Sessions"],
+                    textposition="outside",
+                )
+            )
+            fig_vp.add_trace(
+                go.Bar(
+                    name="Unique Mentees Reached",
+                    y=vp_grp["Virtual_Platform"],
+                    x=vp_grp["Unique_Mentees"],
+                    orientation="h",
+                    marker_color="#0D9488",
+                    text=vp_grp["Unique_Mentees"],
+                    textposition="outside",
+                )
+            )
+            fig_vp.add_trace(
+                go.Bar(
+                    name="Mentee Touches",
+                    y=vp_grp["Virtual_Platform"],
+                    x=vp_grp["Mentee_Touches"],
+                    orientation="h",
+                    marker_color="#F59E0B",
+                    text=vp_grp["Mentee_Touches"],
+                    textposition="outside",
+                )
+            )
+            fig_vp.update_layout(
+                barmode="group",
+                height=265,
+                margin=dict(l=10, r=35, t=20, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                xaxis_title="Count",
+                yaxis_title="",
+                plot_bgcolor="#FFFFFF",
+                paper_bgcolor="#FFFFFF",
+            )
+            st.plotly_chart(fig_vp, use_container_width=True)
+            vp_tbl = vp_grp.sort_values("Mentee_Touches", ascending=False).rename(
+                columns={
+                    "Virtual_Platform": "Virtual Platform",
+                    "Virtual_Sessions": "Sessions",
+                    "Unique_Mentees": "Unique Mentees",
+                    "Mentee_Touches": "Touches",
+                    "Total_Minutes": "Logged Mins",
+                }
+            )
+            vp_tbl["Logged Mins"] = vp_tbl["Logged Mins"].astype(int)
+            st.dataframe(vp_tbl, hide_index=True, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- ROW 2: CURRICULUM SEPARATION (MEDICAL VS MANAGEMENT MODULES & MODALITIES) ---
+    c1, c2 = st.columns([1.1, 1.15])
 
     with c1:
-        st.markdown("#### 1. Medical vs. Management Curriculum Reach by Modality")
-        mod_order = ["Centralized Training", "Onsite Mentorship", "Virtual / Ad-hoc (WhatsApp & Phone)"]
+        st.markdown("#### 3. Medical vs. Management Curriculum Reach by Modality")
+        mod_order = ["Centralized Training", "Onsite Mentorship", "Special Training", "Virtual / Ad-hoc Support"]
+        active_mods = [m for m in mod_order if m in df_win["Modality"].unique()] or mod_order[:3]
         curr_mod_rows = []
         for curr_lbl, curr_key in [("Medical Curriculum", "Medical"), ("Management Curriculum", "Management")]:
             sub_c = df_win[df_win["Curriculum"].str.contains(curr_key, case=False, na=False)]
-            for m in mod_order:
+            for m in active_mods:
                 sub_cm = sub_c[sub_c["Modality"] == m]
                 curr_mod_rows.append(
                     {
@@ -303,11 +452,11 @@ def render_mentee_tracker_view():
         )
         st.plotly_chart(fig_cm, use_container_width=True)
         st.caption(
-            f"Overall deduplication check: **{med_unique:,}** Medical + **{mgt_unique:,}** Management − **{dual_curr_unique:,}** Dual-Curriculum overlap = **{unique_total:,}** total unique beneficiaries."
+            f"Deduplication reconciliation: **{med_unique:,}** Medical + **{mgt_unique:,}** Management − **{dual_curr_unique:,}** Dual-Curriculum overlap = **{unique_total:,}** strictly unique beneficiaries."
         )
 
     with c2:
-        st.markdown("#### 2. Curriculum Module Coverage (Med Mod 1–5 vs. Mgt Mod 1–4)")
+        st.markdown("#### 4. Curriculum Module Coverage (Med Mod 1–5 vs. Mgt Mod 1–4)")
         mod_code_order = [
             "med-mod-1", "med-mod-2", "med-mod-3", "med-mod-4", "med-mod-5",
             "mgt-mod-1", "mgt-mod-2", "mgt-mod-3", "mgt-mod-4",
@@ -320,7 +469,7 @@ def render_mentee_tracker_view():
                     "Module": MODULE_LABELS.get(code, code),
                     "Stream": "Medical Curriculum" if code.startswith("med-") else "Management Curriculum",
                     "Unique Mentees": int(sub_mc["beneficiary_uid"].nunique()),
-                    "Sessions": int(len(sub_mc)),
+                    "Sessions": int(sub_mc["Session_UID"].nunique()),
                 }
             )
         df_mp = pd.DataFrame(mod_prog_rows)
@@ -347,11 +496,11 @@ def render_mentee_tracker_view():
 
     st.markdown("---")
 
-    # --- ROW 2: MONTHLY DEDUPLICATION CURVE + MALE VS FEMALE STATISTICAL ANALYSIS ---
+    # --- ROW 3: MONTHLY DEDUPLICATION CURVE + MALE VS FEMALE STATISTICAL ANALYSIS ---
     t_col, g_col = st.columns([1.15, 1.1])
 
     with t_col:
-        st.markdown("#### 3. Monthly Trajectory: Unique Headcount vs. Modality Volume")
+        st.markdown("#### 5. Monthly Trajectory: Unique Headcount vs. Modality Volume")
         m_grp = (
             df_yr.groupby(["Year_Month", "Month_Label", "Modality"], as_index=False)
             .agg(Encounters=("event_uid", "count"))
@@ -366,16 +515,17 @@ def render_mentee_tracker_view():
         palette = {
             "Centralized Training": "#1E40AF",
             "Onsite Mentorship": "#0D9488",
-            "Virtual / Ad-hoc (WhatsApp & Phone)": "#F59E0B",
+            "Special Training": "#7C3AED",
+            "Virtual / Ad-hoc Support": "#F59E0B",
         }
-        for m in mod_order:
+        for m in active_mods:
             sub_m = m_grp[m_grp["Modality"] == m].set_index("Year_Month").reindex(u_monthly["Year_Month"]).fillna(0)
             fig_trend.add_trace(
                 go.Bar(
                     name=f"{m} (Touches)",
                     x=u_monthly["Month_Label"],
                     y=sub_m["Encounters"].values,
-                    marker_color=palette[m],
+                    marker_color=palette.get(m, "#64748B"),
                     opacity=0.82,
                 )
             )
@@ -403,21 +553,21 @@ def render_mentee_tracker_view():
         st.plotly_chart(fig_trend, use_container_width=True)
 
     with g_col:
-        st.markdown("#### 4. Male vs. Female Mentees by Curriculum & Modality")
+        st.markdown("#### 6. Male vs. Female Mentees by Curriculum & Channel")
         g_curr_rows = []
         for g in ["Female", "Male"]:
             sub_g = df_win[df_win["Gender"] == g]
             for c_lbl, c_key in [("Medical Curriculum", "Medical"), ("Management Curriculum", "Management")]:
                 u_gc = int(sub_g[sub_g["Curriculum"].str.contains(c_key, case=False, na=False)]["beneficiary_uid"].nunique())
-                g_curr_rows.append({"Gender": g, "Curriculum": c_lbl, "Unique Mentees": u_gc})
-            for m in mod_order:
-                u_gm = int(sub_g[sub_g["Modality"] == m]["beneficiary_uid"].nunique())
-                g_curr_rows.append({"Gender": g, "Curriculum": m.split(" (")[0], "Unique Mentees": u_gm})
+                g_curr_rows.append({"Gender": g, "Segment": c_lbl, "Unique Mentees": u_gc})
+            for dm_lbl, dm_val in [("Physical Onsite", "Physical / In-Person Onsite"), ("Virtual Support", "Virtual Mentorship / Support")]:
+                u_gd = int(sub_g[sub_g["Delivery_Mode"] == dm_val]["beneficiary_uid"].nunique())
+                g_curr_rows.append({"Gender": g, "Segment": dm_lbl, "Unique Mentees": u_gd})
 
         df_gc = pd.DataFrame(g_curr_rows)
         fig_gender = px.bar(
             df_gc,
-            x="Curriculum",
+            x="Segment",
             y="Unique Mentees",
             color="Gender",
             barmode="group",
@@ -456,11 +606,11 @@ def render_mentee_tracker_view():
 
     st.markdown("---")
 
-    # --- ROW 3: BLENDED PATHWAYS + MENTOR TRACK & COHORT MATRIX + LORENZ/GINI ---
+    # --- ROW 4: BLENDED PATHWAYS + MENTOR TRACK & COHORT MATRIX + LORENZ/GINI ---
     m_col1, m_col2, m_col3 = st.columns([1.1, 1.15, 1.0])
 
     with m_col1:
-        st.markdown("#### 5. Blended Modality Pathways (Mutually Exclusive)")
+        st.markdown("#### 7. Blended Modality Pathways (Mutually Exclusive)")
         combo_df = (
             person_df.groupby("Modality_Combo", as_index=False)
             .agg(Unique_Mentees=("beneficiary_uid", "count"), Mean_Touches=("Total_Encounters", "mean"))
@@ -489,18 +639,18 @@ def render_mentee_tracker_view():
         st.plotly_chart(fig_combo, use_container_width=True)
 
     with m_col2:
-        st.markdown("#### 6. Mentor Reach by Track & Cohort")
+        st.markdown("#### 8. Mentor Reach by Track & Cohort")
         mentor_rows = []
         for slug, info in MENTOR_REGISTRY.items():
             sub_t = df_win[df_win["trainer_raw"].str.contains(slug, case=False, na=False)]
             u_m = int(sub_t["beneficiary_uid"].nunique())
-            e_m = int(len(sub_t))
+            s_m = int(sub_t["Session_UID"].nunique())
             mentor_rows.append(
                 {
                     "Mentor": f"{info['name']} ({info['cohort']})",
                     "Track": f"{info['track']} Mentor",
                     "Unique Mentees": u_m,
-                    "Total Sessions": e_m,
+                    "Coaching Sessions": s_m,
                 }
             )
         df_mentors = pd.DataFrame(mentor_rows).sort_values("Unique Mentees", ascending=True)
@@ -510,7 +660,7 @@ def render_mentee_tracker_view():
             y="Mentor",
             color="Track",
             orientation="h",
-            text=df_mentors.apply(lambda r: f"{r['Unique Mentees']} uniq ({r['Total Sessions']} sess)", axis=1),
+            text=df_mentors.apply(lambda r: f"{r['Unique Mentees']} uniq ({r['Coaching Sessions']} sess)", axis=1),
             color_discrete_map={"Medical Mentor": "#0F2C59", "Management Mentor": "#0D9488"},
             height=330,
         )
@@ -525,7 +675,7 @@ def render_mentee_tracker_view():
         st.plotly_chart(fig_mentors, use_container_width=True)
 
     with m_col3:
-        st.markdown("#### 7. Coverage Equity (Lorenz & Gini)")
+        st.markdown("#### 9. Coverage Equity (Lorenz & Gini)")
         doses = np.sort(person_df["Total_Encounters"].values)
         gini = _gini_coefficient(doses)
         cum_people = np.insert(np.arange(1, len(doses) + 1) / len(doses) * 100.0, 0, 0.0)
@@ -565,11 +715,67 @@ def render_mentee_tracker_view():
 
     st.markdown("---")
 
-    # --- ROW 4: CADRE BREAKDOWN & SEARCHABLE DEDUPLICATED MENTEE ROSTER ---
+    # --- ROW 5: 38-FACILITY MENTORSHIP COVERAGE & GAP MATRIX ---
+    st.markdown(f"#### 10. Facility-Level Mentorship Coverage & Gap Matrix ({window_label})")
+    cov_df = build_facility_coverage_matrix(df_win)
+    if not cov_df.empty:
+        partner_only = cov_df[~cov_df["Coverage_Status"].str.contains("Non-KHIS", na=False)]
+        full_cnt = int((partner_only["Coverage_Status"].str.contains("Full Dual Coverage")).sum())
+        med_only_cnt = int((partner_only["Coverage_Status"].str.contains("Medical Only")).sum())
+        mgt_only_cnt = int((partner_only["Coverage_Status"].str.contains("Management Only")).sum())
+        zero_cnt = int((partner_only["Coverage_Status"].str.contains("Zero Reach Gap")).sum())
+
+        g1, g2, g3, g4 = st.columns(4)
+        g1.metric("Full Dual Coverage (Med + Mgt)", f"{full_cnt} / {len(partner_only)} Sites", f"{(full_cnt/max(len(partner_only),1)*100):.1f}% of Portfolio")
+        g2.metric("Medical Only (Needs Management)", f"{med_only_cnt} Sites", "Schedule Mgt Modules 1–4")
+        g3.metric("Management Only (Needs Medical)", f"{mgt_only_cnt} Sites", "Schedule Med Modules 1–5")
+        g4.metric("Zero Reach Gap (0 Mentees)", f"{zero_cnt} Sites", "Priority Mentor Deployment", delta_color="inverse")
+
+        cov_filter = st.radio(
+            "Filter Facility Coverage Matrix",
+            [
+                "All Facilities",
+                "Zero Reach Gap (0 Mentees)",
+                "Partial Coverage (Needs Medical or Management)",
+                "Full Dual Coverage (Med + Mgt)",
+            ],
+            horizontal=True,
+            key="mt_cov_filter",
+        )
+        disp_cov = cov_df.copy()
+        if cov_filter.startswith("Zero"):
+            disp_cov = disp_cov[disp_cov["Coverage_Status"].str.contains("Zero Reach Gap")]
+        elif cov_filter.startswith("Partial"):
+            disp_cov = disp_cov[disp_cov["Coverage_Status"].str.contains("Only")]
+        elif cov_filter.startswith("Full"):
+            disp_cov = disp_cov[disp_cov["Coverage_Status"].str.contains("Full Dual Coverage")]
+
+        st.dataframe(
+            disp_cov.rename(
+                columns={
+                    "Coverage_Status": "Coverage & Gap Status",
+                    "Unique_Mentees": "Unique Mentees",
+                    "Medical_Mentees": "Med Mentees",
+                    "Management_Mentees": "Mgt Mentees",
+                    "Onsite_Sessions": "Onsite Sessions",
+                    "Virtual_Sessions": "Virtual Sessions",
+                    "Total_Touches": "Total Touches",
+                    "Assigned_Mentors": "Mentor(s)",
+                    "Last_Mentorship": "Last Activity",
+                }
+            ),
+            hide_index=True,
+            use_container_width=True,
+            height=340,
+        )
+
+    st.markdown("---")
+
+    # --- ROW 6: CADRE BREAKDOWN & SEARCHABLE DEDUPLICATED MENTEE ROSTER ---
     cad_col, ros_col = st.columns([0.95, 1.45])
 
     with cad_col:
-        st.markdown("#### 8. Unique Beneficiaries by Cadre")
+        st.markdown("#### 11. Unique Beneficiaries by Cadre")
         cad_df = (
             person_df.groupby("Cadre", as_index=False)
             .agg(Unique_Mentees=("beneficiary_uid", "count"))
@@ -596,7 +802,7 @@ def render_mentee_tracker_view():
         st.plotly_chart(fig_cad, use_container_width=True)
 
     with ros_col:
-        st.markdown(f"#### 9. Deduplicated Beneficiary Roster ({window_label})")
+        st.markdown(f"#### 12. Deduplicated Beneficiary Roster ({window_label})")
         search_q = st.text_input(
             "Filter roster by Mentee Name, Facility, Curriculum, Mentor, or Cadre",
             placeholder="e.g., Diwopa, Medical, Management, Nurse, Newton, Mary...",

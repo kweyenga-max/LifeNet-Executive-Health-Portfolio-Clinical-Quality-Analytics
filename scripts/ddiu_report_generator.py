@@ -1049,6 +1049,80 @@ def generate_ddiu_pdf_bytes(period_label: str, base_dir: Path | None = None) -> 
         ]))
         story.append(slt)
 
+    # --- SECTION 7: DEDUPLICATED MENTEE & BENEFICIARY REACH + COVERAGE GAPS ---
+    try:
+        from scripts.mentee_tracker_adapter import sync_monitrac_mentees, build_facility_coverage_matrix
+        df_mt_pdf = sync_monitrac_mentees(force_live=False)
+    except Exception:
+        df_mt_pdf = pd.DataFrame()
+
+    if not df_mt_pdf.empty:
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("7. DEDUPLICATED MENTEE & BENEFICIARY REACH & FACILITY COVERAGE GAPS", s_sec))
+        u_all = int(df_mt_pdf["beneficiary_uid"].nunique())
+        u_med = int(df_mt_pdf[df_mt_pdf["Curriculum"].str.contains("Medical", case=False, na=False)]["beneficiary_uid"].nunique())
+        u_mgt = int(df_mt_pdf[df_mt_pdf["Curriculum"].str.contains("Management", case=False, na=False)]["beneficiary_uid"].nunique())
+        s_onsite = int(df_mt_pdf[df_mt_pdf["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique())
+        s_virt = int(df_mt_pdf[df_mt_pdf["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique())
+        u_fem = int(df_mt_pdf[df_mt_pdf["Gender"] == "Female"]["beneficiary_uid"].nunique())
+        u_male = int(df_mt_pdf[df_mt_pdf["Gender"] == "Male"]["beneficiary_uid"].nunique())
+
+        vp_sub = df_mt_pdf[df_mt_pdf["Delivery_Mode"] == "Virtual Mentorship / Support"]
+        vp_bits = []
+        if not vp_sub.empty:
+            for plat, cnt in vp_sub.groupby("Virtual_Platform")["Session_UID"].nunique().sort_values(ascending=False).items():
+                vp_bits.append(f"{plat}: {int(cnt)}")
+        vp_summary = ", ".join(vp_bits) if vp_bits else "None logged"
+
+        story.append(
+            Paragraph(
+                f"Across MoniTrac Mentee Tracker records, LifeNet has reached <b>{u_all:,} strictly unique beneficiaries</b> "
+                f"(deduplicated from <b>{len(df_mt_pdf):,}</b> total mentorship touches; <b>{u_fem:,} Female</b> vs. <b>{u_male:,} Male</b>). "
+                f"By curriculum stream, <b>{u_med:,}</b> unique mentees completed <b>Medical Curriculum</b> modules and "
+                f"<b>{u_mgt:,}</b> completed <b>Management Curriculum</b> modules. Delivery comprised <b>{s_onsite:,} Physical Onsite</b> "
+                f"coaching sessions and <b>{s_virt:,} Virtual</b> sessions ({vp_summary}).",
+                s_body,
+            )
+        )
+        story.append(Spacer(1, 4))
+
+        cov_pdf = build_facility_coverage_matrix(df_mt_pdf)
+        gap_pdf = cov_pdf[cov_pdf["Coverage_Status"].str.contains("Zero Reach Gap|Only", na=False)].head(15)
+        if not gap_pdf.empty:
+            mt_rows = [[
+                Paragraph("Partner Facility", s_cell_hdr),
+                Paragraph("Coverage / Gap Status", s_cell_hdr),
+                Paragraph("Unique", s_cell_hdr),
+                Paragraph("Med", s_cell_hdr),
+                Paragraph("Mgt", s_cell_hdr),
+                Paragraph("Onsite", s_cell_hdr),
+                Paragraph("Virtual", s_cell_hdr),
+            ]]
+            for _, r in gap_pdf.iterrows():
+                st_str = str(r["Coverage_Status"])
+                st_col = LN_CRIMSON if "Zero" in st_str else LN_AMBER
+                clean_st = st_str.split(" ", 1)[1] if " " in st_str else st_str
+                mt_rows.append([
+                    Paragraph(f"<b>{r['Facility']}</b>", s_cell),
+                    Paragraph(f"<font color='{st_col}'><b>{clean_st}</b></font>", s_cell),
+                    Paragraph(f"{int(r['Unique_Mentees'])}", s_cell),
+                    Paragraph(f"{int(r['Medical_Mentees'])}", s_cell),
+                    Paragraph(f"{int(r['Management_Mentees'])}", s_cell),
+                    Paragraph(f"{int(r['Onsite_Sessions'])}", s_cell),
+                    Paragraph(f"{int(r['Virtual_Sessions'])}", s_cell),
+                ])
+            mtt = Table(mt_rows, colWidths=[2.35 * inch, 2.05 * inch, 0.55 * inch, 0.50 * inch, 0.50 * inch, 0.60 * inch, 0.60 * inch])
+            mtt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(LN_NAVY)),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ]))
+            story.append(mtt)
+
     doc.build(story)
     buf.seek(0)
     return buf.read()

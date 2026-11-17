@@ -2741,6 +2741,49 @@ elif active_tab == "📑 Monthly DDIU Brief":
         styled_ddiu_pss = pss_pend_ui.style.format(fmt_ddiu_pss).set_properties(**{"background-color": "#FFFFFF", "color": "#0F172A", "border-color": "#E2E8F0"})
         st.dataframe(styled_ddiu_pss, hide_index=True, use_container_width=True)
 
+
+# ---------------------------------------------------------
+# DDIU SECTION: DEDUPLICATED MENTEE & BENEFICIARY REACH
+# ---------------------------------------------------------
+    st.markdown("---")
+    from scripts.mentee_tracker_adapter import sync_monitrac_mentees, build_facility_coverage_matrix
+    df_mt_ddiu = sync_monitrac_mentees(force_live=False)
+    if not df_mt_ddiu.empty:
+        st.markdown("#### 🎓 Mentee & Beneficiary Reach, Curriculum Split & Facility Coverage Gaps")
+        m_uniq_all = int(df_mt_ddiu["beneficiary_uid"].nunique())
+        m_med_u = int(df_mt_ddiu[df_mt_ddiu["Curriculum"].str.contains("Medical", case=False, na=False)]["beneficiary_uid"].nunique())
+        m_mgt_u = int(df_mt_ddiu[df_mt_ddiu["Curriculum"].str.contains("Management", case=False, na=False)]["beneficiary_uid"].nunique())
+        m_onsite_s = int(df_mt_ddiu[df_mt_ddiu["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique())
+        m_virt_s = int(df_mt_ddiu[df_mt_ddiu["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique())
+        m_fem_u = int(df_mt_ddiu[df_mt_ddiu["Gender"] == "Female"]["beneficiary_uid"].nunique())
+        m_male_u = int(df_mt_ddiu[df_mt_ddiu["Gender"] == "Male"]["beneficiary_uid"].nunique())
+
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("Unique Beneficiaries (Deduplicated)", f"{m_uniq_all:,}", f"{len(df_mt_ddiu):,} total touches")
+        mc2.metric("Medical vs. Management", f"{m_med_u:,} Med · {m_mgt_u:,} Mgt", "Deduplicated per stream")
+        mc3.metric("Sessions (Onsite vs. Virtual)", f"{m_onsite_s:,} Onsite · {m_virt_s:,} Virtual", f"{m_onsite_s + m_virt_s:,} total coaching sessions")
+        mc4.metric("Gender Split (Female / Male)", f"{m_fem_u:,} F / {m_male_u:,} M", f"{(m_fem_u/max(m_fem_u+m_male_u,1)*100):.1f}% Female")
+
+        cov_ddiu = build_facility_coverage_matrix(df_mt_ddiu)
+        gaps_ddiu = cov_ddiu[cov_ddiu["Coverage_Status"].str.contains("Zero Reach Gap|Only", na=False)]
+        if not gaps_ddiu.empty:
+            st.caption("Priority Mentorship Coverage Gaps across the 38 Partner Facilities (Zero-reach sites or single-curriculum sites requiring Medical/Management pairing):")
+            st.dataframe(
+                gaps_ddiu[["Facility", "Coverage_Status", "Unique_Mentees", "Medical_Mentees", "Management_Mentees", "Onsite_Sessions", "Virtual_Sessions", "Last_Mentorship"]].rename(
+                    columns={
+                        "Coverage_Status": "Gap Status",
+                        "Unique_Mentees": "Unique Mentees",
+                        "Medical_Mentees": "Med",
+                        "Management_Mentees": "Mgt",
+                        "Onsite_Sessions": "Onsite Sess",
+                        "Virtual_Sessions": "Virtual Sess",
+                        "Last_Mentorship": "Last Activity",
+                    }
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+
 elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)":
     from scripts import pss_view as pv
     pv.render_pss_view()
