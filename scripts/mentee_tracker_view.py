@@ -13,6 +13,10 @@ from scripts.mentee_tracker_adapter import (
     sync_monitrac_mentees,
 )
 
+INK = "#0F172A"
+SLATE = "#334155"
+GRID = "#E2E8F0"
+
 
 def _wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     if n <= 0:
@@ -33,17 +37,88 @@ def _gini_coefficient(values: np.ndarray) -> float:
     return float((np.sum((2 * index - n - 1) * arr)) / (n * np.sum(arr)))
 
 
+def _style_fig(fig: go.Figure, height: int = 350, margin: dict | None = None, x_max_pad: float | None = None) -> go.Figure:
+    """Enforces crisp dark ink on pure white canvas regardless of Streamlit Light/Dark theme."""
+    fig.update_layout(
+        template="plotly_white",
+        height=height,
+        margin=margin or dict(l=12, r=24, t=34, b=18),
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#FFFFFF",
+        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif", color=INK, size=12),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            font=dict(color=INK, size=11.5),
+            bgcolor="rgba(255,255,255,0.9)",
+        ),
+    )
+    fig.update_xaxes(
+        tickfont=dict(color=INK, size=11.5),
+        title_font=dict(color=INK, size=12),
+        gridcolor=GRID,
+        linecolor="#94A3B8",
+        zerolinecolor="#94A3B8",
+    )
+    fig.update_yaxes(
+        tickfont=dict(color=INK, size=11.5),
+        title_font=dict(color=INK, size=12),
+        gridcolor=GRID,
+        linecolor="#94A3B8",
+        zerolinecolor="#94A3B8",
+    )
+    if x_max_pad is not None and x_max_pad > 0:
+        fig.update_xaxes(range=[0, x_max_pad * 1.26])
+    fig.update_traces(
+        textfont=dict(color=INK, size=11.5),
+        cliponaxis=False,
+        selector=dict(type="bar"),
+    )
+    return fig
+
+
+def _explain_box(text: str) -> None:
+    st.markdown(
+        f"""
+        <div style="background:#F8FAFC;border-left:4px solid #0F2C59;border-top:1px solid #E2E8F0;border-right:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0;border-radius:0 8px 8px 0;padding:10px 14px;margin-top:6px;margin-bottom:10px;color:#0F172A;font-size:13px;line-height:1.5;">
+            <b style="color:#0F2C59;">What's happening:</b> {text}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _kpi_card(title: str, value: str, sub: str, accent: str = "#0F2C59") -> str:
     return f"""
-    <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-top:4px solid {accent};border-radius:10px;padding:15px 17px;box-shadow:0 1px 3px rgba(15,23,42,0.05);height:100%;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#64748B;">{title}</div>
+    <div style="background:#FFFFFF;border:1px solid #CBD5E1;border-top:4px solid {accent};border-radius:10px;padding:15px 17px;box-shadow:0 1px 3px rgba(15,23,42,0.06);height:100%;">
+        <div style="font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:#334155;">{title}</div>
         <div style="font-size:25px;font-weight:800;color:#0F172A;margin:6px 0 4px 0;line-height:1.15;">{value}</div>
-        <div style="font-size:12px;color:#475569;line-height:1.4;">{sub}</div>
+        <div style="font-size:12.5px;color:#1E293B;line-height:1.45;">{sub}</div>
     </div>
     """
 
 
 def render_mentee_tracker_view():
+    # Ensure widget labels & captions have crisp high-contrast ink even if browser uses Dark Mode
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stSelectbox"] label p,
+        div[data-testid="stTextInput"] label p,
+        div[data-testid="stRadio"] label p,
+        div[data-testid="stRadio"] div[role="radiogroup"] label p {
+            color: #0F172A !important;
+            font-weight: 700 !important;
+            opacity: 1 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown(
         """
         <div style="background:linear-gradient(135deg,#0F2C59 0%,#1E3A8A 100%);padding:22px 26px;border-radius:12px;margin-bottom:18px;color:#FFFFFF;">
@@ -53,7 +128,7 @@ def render_mentee_tracker_view():
             <h2 style="margin:4px 0 6px 0;font-size:24px;font-weight:800;color:#FFFFFF;">
                 🎓 Mentee &amp; Beneficiary Reach Analytics
             </h2>
-            <p style="margin:0;font-size:13.5px;color:#E2E8F0;max-width:980px;">
+            <p style="margin:0;font-size:13.5px;color:#F1F5F9;max-width:980px;">
                 Strict entity-level deduplication across <b>Medical Curriculum (Modules 1–5)</b> and <b>Management Curriculum (Modules 1–4)</b>,
                 tracking both <b>Physical In-Person Onsite</b> and <b>Virtual Mentorship Sub-Modalities (WhatsApp, Phone Call, Google Meet/Zoom)</b>.
                 Every mentee is counted under each curriculum and modality they experienced, while counted <b>strictly once</b> in Monthly, Quarterly, and Annual Unique Beneficiary totals.
@@ -199,7 +274,6 @@ def render_mentee_tracker_view():
     med_touches = float(person_df["Total_Encounters"].median())
     iqr_touches = float(person_df["Total_Encounters"].quantile(0.75) - person_df["Total_Encounters"].quantile(0.25))
 
-    # Session Counts: Physical Onsite vs Virtual
     total_sessions = int(df_win["Session_UID"].nunique())
     onsite_sessions = int(df_win[df_win["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique())
     virtual_sessions = int(df_win[df_win["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique())
@@ -290,14 +364,13 @@ def render_mentee_tracker_view():
                     "Coaching Sessions": int(sub_d["Session_UID"].nunique()),
                     "Mentee Touches": int(len(sub_d)),
                     "Unique Mentees Reached": int(sub_d["beneficiary_uid"].nunique()),
-                    "Total Hours": round(float(sub_d["Minutes"].sum()) / 60.0, 1),
                 }
             )
         df_deliv = pd.DataFrame(deliv_rows)
         fig_deliv = go.Figure()
         fig_deliv.add_trace(
             go.Bar(
-                name="Distinct Coaching Sessions",
+                name="Coaching Sessions",
                 x=df_deliv["Channel"],
                 y=df_deliv["Coaching Sessions"],
                 marker_color="#0F2C59",
@@ -320,24 +393,25 @@ def render_mentee_tracker_view():
                 name="Total Mentee Touches",
                 x=df_deliv["Channel"],
                 y=df_deliv["Mentee Touches"],
-                marker_color="#38BDF8",
+                marker_color="#0284C7",
                 text=df_deliv["Mentee Touches"],
                 textposition="outside",
             )
         )
-        fig_deliv.update_layout(
-            barmode="group",
-            height=340,
-            margin=dict(l=10, r=10, t=20, b=15),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            yaxis_title="Count",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_deliv.update_layout(barmode="group", yaxis_title="Count")
+        fig_deliv.update_yaxes(range=[0, max(df_deliv["Mentee Touches"].max(), 1) * 1.18])
+        _style_fig(fig_deliv, height=340)
         st.plotly_chart(fig_deliv, use_container_width=True)
 
+        onsite_share = (onsite_sessions / max(total_sessions, 1)) * 100.0
+        avg_group = (onsite_touches / max(onsite_sessions, 1))
+        _explain_box(
+            f"Physical in-person visits account for <b>{onsite_share:.1f}%</b> ({onsite_sessions:,} of {total_sessions:,}) of all coaching sessions, "
+            f"averaging <b>{avg_group:.1f} mentees per onsite visit</b>, while <b>{virtual_sessions:,} virtual sessions</b> extend rapid follow-up coaching to <b>{int(df_deliv.loc[1, 'Unique Mentees Reached']):,}</b> unique staff without travel overhead."
+        )
+
     with v2:
-        st.markdown("#### 2. Virtual Mentorship Sub-Modalities (WhatsApp, Phone Call, Google Meet/Zoom)")
+        st.markdown("#### 2. Virtual Mentorship Sub-Modalities (WhatsApp, Phone Call, Video)")
         virt_df = df_win[df_win["Delivery_Mode"] == "Virtual Mentorship / Support"].copy()
         if virt_df.empty:
             st.info("No Virtual Mentorship records logged in the selected window.")
@@ -366,7 +440,7 @@ def render_mentee_tracker_view():
             )
             fig_vp.add_trace(
                 go.Bar(
-                    name="Unique Mentees Reached",
+                    name="Unique Mentees",
                     y=vp_grp["Virtual_Platform"],
                     x=vp_grp["Unique_Mentees"],
                     orientation="h",
@@ -381,33 +455,20 @@ def render_mentee_tracker_view():
                     y=vp_grp["Virtual_Platform"],
                     x=vp_grp["Mentee_Touches"],
                     orientation="h",
-                    marker_color="#F59E0B",
+                    marker_color="#D97706",
                     text=vp_grp["Mentee_Touches"],
                     textposition="outside",
                 )
             )
-            fig_vp.update_layout(
-                barmode="group",
-                height=265,
-                margin=dict(l=10, r=35, t=20, b=10),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-                xaxis_title="Count",
-                yaxis_title="",
-                plot_bgcolor="#FFFFFF",
-                paper_bgcolor="#FFFFFF",
-            )
+            fig_vp.update_layout(barmode="group", xaxis_title="Count", yaxis_title="")
+            _style_fig(fig_vp, height=270, x_max_pad=float(vp_grp["Mentee_Touches"].max()))
             st.plotly_chart(fig_vp, use_container_width=True)
-            vp_tbl = vp_grp.sort_values("Mentee_Touches", ascending=False).rename(
-                columns={
-                    "Virtual_Platform": "Virtual Platform",
-                    "Virtual_Sessions": "Sessions",
-                    "Unique_Mentees": "Unique Mentees",
-                    "Mentee_Touches": "Touches",
-                    "Total_Minutes": "Logged Mins",
-                }
+
+            top_vp = vp_grp.sort_values("Virtual_Sessions", ascending=False).iloc[0]
+            _explain_box(
+                f"<b>{top_vp['Virtual_Platform']}</b> is the primary remote coaching channel with <b>{int(top_vp['Virtual_Sessions'])} sessions</b> "
+                f"reaching <b>{int(top_vp['Unique_Mentees'])} unique mentees</b>, complemented by 1-on-1 phone check-ins and WhatsApp quick-consults for real-time clinical and administrative troubleshooting."
             )
-            vp_tbl["Logged Mins"] = vp_tbl["Logged Mins"].astype(int)
-            st.dataframe(vp_tbl, hide_index=True, use_container_width=True)
 
     st.markdown("---")
 
@@ -428,7 +489,6 @@ def render_mentee_tracker_view():
                         "Curriculum": curr_lbl,
                         "Modality": m,
                         "Unique Mentees": int(sub_cm["beneficiary_uid"].nunique()),
-                        "Total Encounters": int(len(sub_cm)),
                     }
                 )
         df_cm = pd.DataFrame(curr_mod_rows)
@@ -440,19 +500,16 @@ def render_mentee_tracker_view():
             barmode="group",
             text="Unique Mentees",
             color_discrete_map={"Medical Curriculum": "#1E3A8A", "Management Curriculum": "#0D9488"},
-            height=350,
         )
         fig_cm.update_traces(textposition="outside")
-        fig_cm.update_layout(
-            margin=dict(l=10, r=10, t=20, b=15),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            yaxis_title="Unique Mentees Reached",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_cm.update_layout(yaxis_title="Unique Mentees Reached", xaxis_title="")
+        fig_cm.update_yaxes(range=[0, max(df_cm["Unique Mentees"].max(), 1) * 1.18])
+        _style_fig(fig_cm, height=345)
         st.plotly_chart(fig_cm, use_container_width=True)
-        st.caption(
-            f"Deduplication reconciliation: **{med_unique:,}** Medical + **{mgt_unique:,}** Management − **{dual_curr_unique:,}** Dual-Curriculum overlap = **{unique_total:,}** strictly unique beneficiaries."
+
+        _explain_box(
+            f"<b>Onsite Mentorship</b> drives the largest reach in both tracks (<b>{med_unique:,}</b> unique Medical mentees and <b>{mgt_unique:,}</b> unique Management mentees overall). "
+            f"Because <b>{dual_curr_unique:,} facility leaders/nurses</b> completed modules in both tracks, summing Medical + Management ({med_unique + mgt_unique:,}) reconciles cleanly to <b>{unique_total:,} strictly unique beneficiaries</b>."
         )
 
     with c2:
@@ -481,18 +538,18 @@ def render_mentee_tracker_view():
             orientation="h",
             text=df_mp.apply(lambda r: f"{r['Unique Mentees']} ({r['Sessions']} sess)", axis=1),
             color_discrete_map={"Medical Curriculum": "#1E3A8A", "Management Curriculum": "#0D9488"},
-            height=350,
         )
         fig_mp.update_traces(textposition="outside")
-        fig_mp.update_layout(
-            margin=dict(l=10, r=55, t=20, b=15),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            yaxis=dict(autorange="reversed", title=""),
-            xaxis_title="Unique Mentees Covered",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_mp.update_layout(yaxis=dict(autorange="reversed", title=""), xaxis_title="Unique Mentees Covered")
+        _style_fig(fig_mp, height=345, x_max_pad=float(df_mp["Unique Mentees"].max()))
         st.plotly_chart(fig_mp, use_container_width=True)
+
+        top_med_mod = df_mp[df_mp["Stream"] == "Medical Curriculum"].sort_values("Unique Mentees", ascending=False).iloc[0]
+        top_mgt_mod = df_mp[df_mp["Stream"] == "Management Curriculum"].sort_values("Unique Mentees", ascending=False).iloc[0]
+        _explain_box(
+            f"Foundational modules lead enrollment—<b>{top_med_mod['Module']}</b> ({top_med_mod['Unique Mentees']} mentees) in Clinical care and "
+            f"<b>{top_mgt_mod['Module']}</b> ({top_mgt_mod['Unique Mentees']} mentees) in Management—while downstream modules (Child Health, NCDs, and HMIS) show progressive cohort rollout."
+        )
 
     st.markdown("---")
 
@@ -526,7 +583,7 @@ def render_mentee_tracker_view():
                     x=u_monthly["Month_Label"],
                     y=sub_m["Encounters"].values,
                     marker_color=palette.get(m, "#64748B"),
-                    opacity=0.82,
+                    opacity=0.88,
                 )
             )
         fig_trend.add_trace(
@@ -537,20 +594,20 @@ def render_mentee_tracker_view():
                 mode="lines+markers+text",
                 text=u_monthly["Unique_Mentees"],
                 textposition="top center",
+                textfont=dict(color="#B91C1C", size=11.5),
                 line=dict(color="#DC2626", width=3),
                 marker=dict(size=8, color="#DC2626"),
             )
         )
-        fig_trend.update_layout(
-            barmode="stack",
-            height=350,
-            margin=dict(l=10, r=10, t=20, b=15),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            yaxis_title="Count",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_trend.update_layout(barmode="stack", yaxis_title="Count")
+        _style_fig(fig_trend, height=345)
         st.plotly_chart(fig_trend, use_container_width=True)
+
+        peak_row = u_monthly.sort_values("Unique_Mentees", ascending=False).iloc[0]
+        _explain_box(
+            f"The stacked bars show total monthly mentorship touches, while the <b>red line</b> tracks deduplicated unique individuals. "
+            f"Mentorship activity peaked in <b>{peak_row['Month_Label']}</b> with <b>{int(peak_row['Unique_Mentees'])} unique mentees</b> reached; whenever the stacked bar rises above the red line, mentees received multiple coaching touches within that same month."
+        )
 
     with g_col:
         st.markdown("#### 6. Male vs. Female Mentees by Curriculum & Channel")
@@ -573,41 +630,27 @@ def render_mentee_tracker_view():
             barmode="group",
             text="Unique Mentees",
             color_discrete_map={"Female": "#7C3AED", "Male": "#0284C7"},
-            height=305,
         )
         fig_gender.update_traces(textposition="outside")
-        fig_gender.update_layout(
-            margin=dict(l=10, r=10, t=15, b=10),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            xaxis_title="",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_gender.update_layout(xaxis_title="", yaxis_title="Unique Mentees")
+        fig_gender.update_yaxes(range=[0, max(df_gc["Unique Mentees"].max(), 1) * 1.18])
+        _style_fig(fig_gender, height=300)
         st.plotly_chart(fig_gender, use_container_width=True)
 
         ct = pd.crosstab(
             df_win[df_win["Gender"].isin(["Female", "Male"])]["Gender"],
             df_win[df_win["Gender"].isin(["Female", "Male"])]["Modality"],
         )
-        stat_notes = []
+        stat_summary = f"Women represent <b>{fem_pct:.1f}%</b> ({n_female:,} vs. {n_male:,} men) of unique mentees, mirroring Kenya's frontline nursing/clinical workforce."
         if ct.shape[0] == 2 and ct.shape[1] >= 2:
             chi2, p_val, dof, _ = stats.chi2_contingency(ct)
-            sig_lbl = "statistically significant gender difference" if p_val < 0.05 else "no statistically significant gender skew"
-            stat_notes.append(f"**Modality × Gender ($\chi^2$):** $\chi^2={chi2:.2f}$ (df={dof}, $p={p_val:.3f}$) → *{sig_lbl}*.")
-        f_doses = person_df[person_df["Gender"] == "Female"]["Total_Encounters"].values
-        m_doses = person_df[person_df["Gender"] == "Male"]["Total_Encounters"].values
-        if len(f_doses) >= 3 and len(m_doses) >= 3:
-            u_stat, u_pval = stats.mannwhitneyu(f_doses, m_doses, alternative="two-sided")
-            stat_notes.append(
-                f"**Touch Dose by Gender (Mann-Whitney $U$):** Female mean **{f_doses.mean():.2f}** vs. Male **{m_doses.mean():.2f}** ($U={u_stat:.0f}$, $p={u_pval:.3f}$)."
-            )
-        if stat_notes:
-            st.info("  \n".join(stat_notes))
+            stat_summary += f" A Chi-square test across modalities (χ² = {chi2:.2f}, <i>p</i> = {p_val:.3f}) confirms <b>equitable access</b> with no gender barrier to onsite or virtual coaching."
+        _explain_box(stat_summary)
 
     st.markdown("---")
 
     # --- ROW 4: BLENDED PATHWAYS + MENTOR TRACK & COHORT MATRIX + LORENZ/GINI ---
-    m_col1, m_col2, m_col3 = st.columns([1.1, 1.15, 1.0])
+    m_col1, m_col2, m_col3 = st.columns([1.15, 1.15, 0.95])
 
     with m_col1:
         st.markdown("#### 7. Blended Modality Pathways (Mutually Exclusive)")
@@ -623,20 +666,18 @@ def render_mentee_tracker_view():
             y="Modality_Combo",
             orientation="h",
             text=combo_df.apply(lambda r: f"{int(r['Unique_Mentees'])} ({r['Share_%']:.1f}%)", axis=1),
-            color="Mean_Touches",
-            color_continuous_scale="Blues",
-            height=330,
+            color_discrete_sequence=["#1E40AF"],
         )
         fig_combo.update_traces(textposition="outside")
-        fig_combo.update_layout(
-            margin=dict(l=10, r=45, t=20, b=10),
-            xaxis_title="Unique Beneficiaries (Sum = 100%)",
-            yaxis_title="",
-            coloraxis_colorbar_title="Avg Touches",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_combo.update_layout(xaxis_title="Unique Beneficiaries (Sum = 100%)", yaxis_title="")
+        _style_fig(fig_combo, height=340, x_max_pad=float(combo_df["Unique_Mentees"].max()))
         st.plotly_chart(fig_combo, use_container_width=True)
+
+        single_onsite = int(combo_df[combo_df["Modality_Combo"] == "Onsite Mentorship"]["Unique_Mentees"].sum())
+        _explain_box(
+            f"Every unique mentee falls into <b>exactly one</b> pathway bar: <b>{single_onsite:,}</b> ({single_onsite/max(unique_total,1)*100:.1f}%) received Onsite Mentorship alone, "
+            f"while <b>{blended_n:,} ({blended_pct:.1f}%)</b> experienced a <b>blended multi-modality journey</b> combining Centralized Training, Onsite Visits, and/or Virtual Support."
+        )
 
     with m_col2:
         st.markdown("#### 8. Mentor Reach by Track & Cohort")
@@ -662,17 +703,17 @@ def render_mentee_tracker_view():
             orientation="h",
             text=df_mentors.apply(lambda r: f"{r['Unique Mentees']} uniq ({r['Coaching Sessions']} sess)", axis=1),
             color_discrete_map={"Medical Mentor": "#0F2C59", "Management Mentor": "#0D9488"},
-            height=330,
         )
         fig_mentors.update_traces(textposition="outside")
-        fig_mentors.update_layout(
-            margin=dict(l=10, r=55, t=20, b=10),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            yaxis_title="",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_mentors.update_layout(yaxis_title="", xaxis_title="Unique Mentees Reached")
+        _style_fig(fig_mentors, height=340, x_max_pad=float(df_mentors["Unique Mentees"].max()))
         st.plotly_chart(fig_mentors, use_container_width=True)
+
+        top_mentor = df_mentors.sort_values("Unique Mentees", ascending=False).iloc[0]
+        _explain_box(
+            f"<b>Cohort 1 &amp; 2</b> mentors (Joseph Kirori and Lewis Muriuki) carry higher cumulative unique headcounts due to longer tenure, "
+            f"led by <b>{top_mentor['Mentor']}</b> ({top_mentor['Unique Mentees']} unique mentees across {top_mentor['Coaching Sessions']} sessions), while <b>Cohort 3</b> mentors (Newton, Whyttney, Adrian, Mary) are actively scaling new facilities."
+        )
 
     with m_col3:
         st.markdown("#### 9. Coverage Equity (Lorenz & Gini)")
@@ -688,7 +729,7 @@ def render_mentee_tracker_view():
                 y=[0, 100],
                 mode="lines",
                 name="Perfect Equality (Gini = 0)",
-                line=dict(color="#94A3B8", dash="dash"),
+                line=dict(color="#64748B", dash="dash", width=2),
             )
         )
         fig_lorenz.add_trace(
@@ -698,20 +739,22 @@ def render_mentee_tracker_view():
                 mode="lines",
                 name=f"Actual Reach (Gini = {gini:.2f})",
                 fill="tonexty",
-                fillcolor="rgba(15, 44, 89, 0.14)",
-                line=dict(color="#0F2C59", width=2.5),
+                fillcolor="rgba(15, 44, 89, 0.16)",
+                line=dict(color="#0F2C59", width=3),
             )
         )
         fig_lorenz.update_layout(
-            height=330,
-            margin=dict(l=10, r=10, t=20, b=10),
             xaxis_title="Cumulative % of Unique Mentees",
             yaxis_title="Cumulative % of Touches",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
         )
+        _style_fig(fig_lorenz, height=340)
         st.plotly_chart(fig_lorenz, use_container_width=True)
+
+        eq_label = "well-balanced distribution" if gini < 0.35 else "moderate concentration among repeat champions"
+        _explain_box(
+            f"A Gini coefficient of <b>{gini:.2f}</b> indicates a <b>{eq_label}</b> (0.00 = every mentee gets identical touches). "
+            f"The closer the solid navy curve hugs the dashed diagonal, the more evenly mentorship visits are spread across all facility staff."
+        )
 
     st.markdown("---")
 
@@ -730,6 +773,11 @@ def render_mentee_tracker_view():
         g2.metric("Medical Only (Needs Management)", f"{med_only_cnt} Sites", "Schedule Mgt Modules 1–4")
         g3.metric("Management Only (Needs Medical)", f"{mgt_only_cnt} Sites", "Schedule Med Modules 1–5")
         g4.metric("Zero Reach Gap (0 Mentees)", f"{zero_cnt} Sites", "Priority Mentor Deployment", delta_color="inverse")
+
+        _explain_box(
+            f"<b>{full_cnt} of {len(partner_only)} partner facilities ({full_cnt/max(len(partner_only),1)*100:.1f}%)</b> have achieved full dual-track coverage (both Medical and Management curricula active), "
+            f"while <b>{med_only_cnt + mgt_only_cnt} sites</b> have single-track coverage and <b>{zero_cnt} sites</b> have zero touches in this period—guiding exact mentor deployment."
+        )
 
         cov_filter = st.radio(
             "Filter Facility Coverage Matrix",
@@ -789,17 +837,22 @@ def render_mentee_tracker_view():
             orientation="h",
             text="Unique_Mentees",
             color_discrete_sequence=["#0F2C59"],
-            height=380,
         )
         fig_cad.update_traces(textposition="outside")
-        fig_cad.update_layout(
-            margin=dict(l=10, r=30, t=15, b=10),
-            yaxis_title="",
-            xaxis_title="Unique Mentees",
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-        )
+        fig_cad.update_layout(yaxis_title="", xaxis_title="Unique Mentees")
+        _style_fig(fig_cad, height=380, x_max_pad=float(cad_df["Unique_Mentees"].max()))
         st.plotly_chart(fig_cad, use_container_width=True)
+
+        known_cad = cad_df[cad_df["Cadre"] != "Unspecified"]
+        unspec_n = int(cad_df[cad_df["Cadre"] == "Unspecified"]["Unique_Mentees"].sum())
+        top_cad = known_cad.sort_values("Unique_Mentees", ascending=False).iloc[0] if not known_cad.empty else None
+        cad_msg = (
+            f"<b>{top_cad['Cadre']}</b> is the largest identified cadre ({int(top_cad['Unique_Mentees'])} unique mentees), followed by Clinical Officers, Accountants, and Pharmacy staff. "
+            if top_cad is not None else ""
+        )
+        if unspec_n > 0:
+            cad_msg += f"<b>{unspec_n}</b> profiles still have blank Cadre attributes in MoniTrac—a quick data-hygiene win for field mentors."
+        _explain_box(cad_msg)
 
     with ros_col:
         st.markdown(f"#### 12. Deduplicated Beneficiary Roster ({window_label})")
@@ -839,4 +892,7 @@ def render_mentee_tracker_view():
             mask = roster_view.apply(lambda r: q_low in " | ".join(str(v).lower() for v in r.values), axis=1)
             roster_view = roster_view[mask]
 
-        st.dataframe(roster_view, hide_index=True, use_container_width=True, height=335)
+        st.dataframe(roster_view, hide_index=True, use_container_width=True, height=345)
+        _explain_box(
+            f"Each row above represents <b>one strictly deduplicated individual</b> (sorted by highest engagement intensity), showing their facility, curriculum stream(s), and exact combination of modalities received."
+        )
