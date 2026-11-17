@@ -25,19 +25,30 @@ ALL_MONTHS = [
 ]
 
 
-def _get_monitrac_credentials():
+def _read_local_secrets_section(section_name):
     try:
-        sec = st.secrets.get("monitrac", {})
-        url = sec.get("url") or os.getenv("MONITRAC_BASE_URL", "")
-        user = sec.get("username") or os.getenv("MONITRAC_USERNAME", "")
-        pwd = sec.get("password") or os.getenv("MONITRAC_PASSWORD", "")
-        return str(url).rstrip("/"), str(user), str(pwd)
+        import tomllib
+        sec_file = os.path.join(os.path.dirname(DATA_DIR), ".streamlit", "secrets.toml")
+        if os.path.exists(sec_file):
+            with open(sec_file, "rb") as f:
+                return tomllib.load(f).get(section_name, {})
     except Exception:
-        return (
-            os.getenv("MONITRAC_BASE_URL", "").rstrip("/"),
-            os.getenv("MONITRAC_USERNAME", ""),
-            os.getenv("MONITRAC_PASSWORD", ""),
-        )
+        pass
+    return {}
+
+
+def _get_monitrac_credentials():
+    sec = {}
+    try:
+        sec = dict(st.secrets.get("monitrac", {}))
+    except Exception:
+        sec = {}
+    if not sec:
+        sec = _read_local_secrets_section("monitrac")
+    url = sec.get("url") or os.getenv("MONITRAC_BASE_URL", "")
+    user = sec.get("username") or os.getenv("MONITRAC_USERNAME", "")
+    pwd = sec.get("password") or os.getenv("MONITRAC_PASSWORD", "")
+    return str(url).rstrip("/"), str(user), str(pwd)
 
 
 def _norm_key(name):

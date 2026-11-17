@@ -33,19 +33,30 @@ def _apply_dq_cleaning(df):
     return df
 
 
-def _get_khis_credentials():
+def _read_local_secrets_section(section_name):
     try:
-        khis_sec = st.secrets.get("khis", {})
-        url = khis_sec.get("url") or os.getenv("KHIS_BASE_URL", "")
-        user = khis_sec.get("username") or os.getenv("KHIS_USERNAME", "")
-        pwd = khis_sec.get("password") or os.getenv("KHIS_PASSWORD", "")
-        return str(url).rstrip("/"), str(user), str(pwd)
+        import tomllib
+        sec_file = os.path.join(os.path.dirname(DATA_DIR), ".streamlit", "secrets.toml")
+        if os.path.exists(sec_file):
+            with open(sec_file, "rb") as f:
+                return tomllib.load(f).get(section_name, {})
     except Exception:
-        return (
-            os.getenv("KHIS_BASE_URL", "").rstrip("/"),
-            os.getenv("KHIS_USERNAME", ""),
-            os.getenv("KHIS_PASSWORD", ""),
-        )
+        pass
+    return {}
+
+
+def _get_khis_credentials():
+    khis_sec = {}
+    try:
+        khis_sec = dict(st.secrets.get("khis", {}))
+    except Exception:
+        khis_sec = {}
+    if not khis_sec:
+        khis_sec = _read_local_secrets_section("khis")
+    url = khis_sec.get("url") or os.getenv("KHIS_BASE_URL", "")
+    user = khis_sec.get("username") or os.getenv("KHIS_USERNAME", "")
+    pwd = khis_sec.get("password") or os.getenv("KHIS_PASSWORD", "")
+    return str(url).rstrip("/"), str(user), str(pwd)
 
 
 def _get_rolling_focus_and_baseline_periods():
