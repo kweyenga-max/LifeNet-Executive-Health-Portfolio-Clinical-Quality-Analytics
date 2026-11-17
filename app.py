@@ -1309,6 +1309,7 @@ tabs = [
     "💼 Financial Performance",
     "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)",
     "📑 Monthly DDIU Brief",
+    "🎓 Mentee & Beneficiary Tracker",
     "🌐 Starlink & Connectivity",
 ]
 from scripts.executive_header import render_executive_header_and_nav
@@ -2743,6 +2744,10 @@ elif active_tab == "📑 Monthly DDIU Brief":
 elif active_tab == "😊 LifeNet Partner facility Patient Satisfaction Survey(PSS)":
     from scripts import pss_view as pv
     pv.render_pss_view()
+
+elif active_tab == "🎓 Mentee & Beneficiary Tracker":
+    from scripts.mentee_tracker_view import render_mentee_tracker_view
+    render_mentee_tracker_view()
 
 elif active_tab == "🌐 Starlink & Connectivity":
     from scripts.connectivity_view import render_connectivity_dashboard
