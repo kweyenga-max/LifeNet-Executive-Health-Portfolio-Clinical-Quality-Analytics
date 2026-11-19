@@ -4,9 +4,18 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
+def _load_local_env(env_path: str = ".env") -> None:
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-load_dotenv()
+_load_local_env()
 
 DASHBOARD_URL = os.getenv(
     "LIFENET_DASHBOARD_URL",
