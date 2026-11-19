@@ -357,7 +357,7 @@ def export_hf_kpi_excel(selected_fac: str, year_str: str, df_matrix: pd.DataFram
 
     ws = wb["HF KPIs"]
     # Stamp Facility Name in top title banner & Year in D2
-    ws["B1"] = f"KEY PERFORMANCE INDICATOR DASHBOARD — {selected_fac.upper()}"
+    ws["B1"] = f"HEALTH FACILITY DASHBOARD — {selected_fac.upper()}"
     ws["D2"] = f"Health Facility: {selected_fac}    |    Reporting Year: {year_str}"
 
     for _, r in df_matrix.iterrows():
@@ -396,7 +396,7 @@ def render_hf_kpi_dashboard_section(
                 border-left: 6px solid #0F2C59;
             ">
                 <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; opacity:0.9;">
-                    Health Facility Level Key Performance Indicator Dashboard
+                    Health Facility Dashboard
                 </div>
                 <div style="font-size:1.22rem; font-weight:800; margin-top:2px;">
                     🏥 {selected_fac}
@@ -426,7 +426,7 @@ def render_hf_kpi_dashboard_section(
         st.download_button(
             label=f"📥 Export {hf_year} Excel Wall-Chart",
             data=excel_bytes,
-            file_name=f"HF_KPI_Dashboard_{safe_fac}_{hf_year}.xlsx",
+            file_name=f"Health_Facility_Dashboard_{safe_fac}_{hf_year}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             key=f"dl_hf_kpi_{safe_fac}_{hf_year}",
@@ -446,16 +446,16 @@ def render_hf_kpi_dashboard_section(
     with tab_board:
         domain_filter = st.selectbox(
             "Filter Indicator Group",
-            options=["All 25 HF KPIs"] + list(dict.fromkeys(df_hf["Domain"].tolist())),
+            options=["All 25 Health Facility Indicators"] + list(dict.fromkeys(df_hf["Domain"].tolist())),
             key=f"hf_kpi_dom_{_norm_fac(selected_fac)}_{hf_year}",
         )
-        disp_df = df_hf if domain_filter == "All 25 HF KPIs" else df_hf[df_hf["Domain"] == domain_filter]
+        disp_df = df_hf if domain_filter == "All 25 Health Facility Indicators" else df_hf[df_hf["Domain"] == domain_filter]
         cols_show = ["Domain", "Indicator", "Target"] + MONTH_NAMES + ["YTD Summary"]
         st.dataframe(
             disp_df[cols_show],
             use_container_width=True,
             hide_index=True,
-            height=680 if domain_filter == "All 25 HF KPIs" else 280,
+            height=680 if domain_filter == "All 25 Health Facility Indicators" else 280,
         )
 
     with tab_defs:
