@@ -52,6 +52,17 @@ def _norm_fac(name: str) -> str:
     return s
 
 
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_opd_snapshot() -> pd.DataFrame:
+    from scripts.khis_adapter import get_live_opd_frame
+    df = get_live_opd_frame(force_live=False)
+    if not df.empty and "facility_name" in df.columns:
+        df = df.copy()
+        df["_fac_norm"] = df["facility_name"].map(_norm_fac)
+    return df
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_anc_snapshot() -> pd.DataFrame:
     path = "data/khis_anc_snapshot.csv.gz"
@@ -148,6 +159,14 @@ def build_hf_kpi_matrix(
                     if not pv_vals.empty:
                         pv_by_month[m_idx] = float(pv_vals.sum())
 
+    # 1b. OPD <5 & >5 (Male + Female) Snapshot by Month
+    df_opd = _load_opd_snapshot()
+    opd_by_month: dict[int, pd.Series] = {}
+    if not df_opd.empty and "_fac_norm" in df_opd.columns:
+        sub_opd = df_opd[(df_opd["_fac_norm"] == fac_norm) & (pd.to_numeric(df_opd["Year"], errors="coerce") == year_int)]
+        for _, r in sub_opd.iterrows():
+            opd_by_month[int(r["MonthNum"])] = r
+
     # 2. ANC Snapshot by Month
     df_anc = _load_anc_snapshot()
     anc_by_month: dict[int, pd.Series] = {}
@@ -180,7 +199,7 @@ def build_hf_kpi_matrix(
                             cum_completed[m_idx] = int(done[uid_col].dropna().nunique())
 
     # Determine latest active reporting month for this facility/year (e.g., Oct = 10)
-    active_months = set(pv_by_month.keys()) | set(anc_by_month.keys()) | set(mt_by_month.keys())
+    active_months = set(opd_by_month.keys()) | set(pv_by_month.keys()) | set(anc_by_month.keys()) | set(mt_by_month.keys())
     if kpi_df_year is not None and not kpi_df_year.empty:
         fac_col_k = kpi_df_year.columns[0]
         sub_k = kpi_df_year[kpi_df_year[fac_col_k].map(_norm_fac) == fac_norm]
@@ -213,8 +232,13 @@ def build_hf_kpi_matrix(
             val = None
             anc_r = anc_by_month.get(m_idx)
 
-            if row_idx == 4:  # Total Workload
-                val = pv_by_month.get(m_idx)
+            opd_r = opd_by_month.get(m_idx)
+
+            if row_idx == 4:  # Total Workload = OPD <5 (M+F) + OPD >5 (M+F)
+                if opd_r is not None and pd.notna(opd_r.get("OPD_Total_Workload")):
+                    val = float(opd_r["OPD_Total_Workload"])
+                else:
+                    val = pv_by_month.get(m_idx)
             elif row_idx == 5 and anc_r is not None:  # Total ANC visits = New + Revisits
                 v_new = pd.to_numeric(anc_r.get("ANC_1st_New"), errors="coerce")
                 v_rev = pd.to_numeric(anc_r.get("ANC_Revisits"), errors="coerce")
@@ -247,8 +271,11 @@ def build_hf_kpi_matrix(
                 val = _extract_kpi_wide_month(kpi_df_year, fac_norm, year_str, m_full, ["Neonataldeaths0-28Days"])
             elif row_idx == 15:  # Perinatal Deaths Audited
                 val = _extract_kpi_wide_month(kpi_df_year, fac_norm, year_str, m_full, ["PerinatalDeathsAudited"])
-            elif row_idx == 16:  # Under Five (<5) cases treated
-                val = _extract_kpi_wide_month(kpi_df_year, fac_norm, year_str, m_full, ["UnderFive", "<5"])
+            elif row_idx == 16:  # Under Five (<5) cases treated = OPD Attendance <5yrs (Male + Female)
+                if opd_r is not None and pd.notna(opd_r.get("OPD_Under5_Total")):
+                    val = float(opd_r["OPD_Under5_Total"])
+                else:
+                    val = _extract_kpi_wide_month(kpi_df_year, fac_norm, year_str, m_full, ["UnderFive", "<5"])
             elif row_idx == 17:  # Maternal deaths (all age bands)
                 val = _extract_kpi_wide_month(kpi_df_year, fac_norm, year_str, m_full, ["Maternaldeaths"])
             elif row_idx == 18:  # Maternal Deaths Audited

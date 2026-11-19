@@ -936,9 +936,11 @@ def load_all_data():
 
     # Merge live KHIS PV & KPI data (rolling LAST_MONTH) without altering QSC or Finance
     try:
-        from scripts.khis_adapter import get_live_pv_and_kpi_frames, get_live_anc_frame
+        from scripts.khis_adapter import get_live_pv_and_kpi_frames, get_live_anc_frame, get_live_opd_frame
         df_pv_live, df_kpi_live_wide = get_live_pv_and_kpi_frames("IwUxQNFazpx", "IPjuLUsTQHG")
-        df_anc_live = get_live_anc_frame("IPjuLUsTQHG", force_live=bool(st.session_state.pop("_force_khis_sync", False)))
+        _force_sync = bool(st.session_state.pop("_force_khis_sync", False))
+        df_anc_live = get_live_anc_frame("IPjuLUsTQHG", force_live=_force_sync)
+        df_opd_live = get_live_opd_frame("IPjuLUsTQHG", force_live=_force_sync)
         if not df_pv_live.empty:
             if df_pv is not None and not df_pv.empty:
                 live_periods = set(df_pv_live["Period"].unique())

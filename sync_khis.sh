@@ -5,7 +5,7 @@ if [ -f ".venv/bin/activate" ]; then
   source .venv/bin/activate
 fi
 python -c '
-from scripts.khis_adapter import get_live_pv_and_kpi_frames, get_live_anc_frame
+from scripts.khis_adapter import get_live_pv_and_kpi_frames, get_live_anc_frame, get_live_opd_frame
 from scripts.monitrac_adapter import sync_monitrac_finance, sync_monitrac_pss
 from scripts.mentee_tracker_adapter import sync_monitrac_mentees
 
@@ -14,6 +14,7 @@ print("Synced KHIS PV rows:", len(df_pv), "| Latest periods:", sorted(df_pv["Per
 print("Synced KHIS KPI shape:", df_kpi.shape)
 
 df_anc = get_live_anc_frame("IPjuLUsTQHG", force_live=True)
+df_opd = get_live_opd_frame("IPjuLUsTQHG", force_live=True)
 print("Synced KHIS ANC rows:", len(df_anc))
 
 df_fin = sync_monitrac_finance(force_live=True)
