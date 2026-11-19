@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from scripts import pss_analytics as pssa
 from scripts import finance_analytics as fa
+from scripts.hf_kpi_dashboard import render_hf_kpi_dashboard_section
 
 NAVY = "#0F2C59"
 NAVY_MID = "#1E40AF"
@@ -1220,3 +1221,11 @@ def render_facility_360_tab(
                 </div>
                 """
                 st.markdown(pss_right_html, unsafe_allow_html=True)
+
+    render_hf_kpi_dashboard_section(
+        selected_fac=selected_fac,
+        facility_pv_df=facility_pv_df,
+        kpi_2025=kpi_2025,
+        kpi_2026=kpi_2026,
+        focus_year=focus_year,
+    )
