@@ -186,7 +186,7 @@ def generate_and_send_weekly_brief(send_email: bool = True) -> tuple[bool, str]:
     smtp_host = email_cfg.get("smtp_host", "smtp.gmail.com")
     smtp_port = int(email_cfg.get("smtp_port", 587))
     app_password = email_cfg.get("app_password", "")
-    recipients = email_cfg.get("starlink_recipients") or ["kweyenga@lninternational.org", "enyakan@lninternational.org"]
+    recipients = email_cfg.get("starlink_recipients") or ["nbyegon@lninternational.org", "esemeadrian@gmail.com", "mwanyama@lninternational.org", "lmuriuki@lninternational.org", "jkirori@lninternational.org", "enyakan@lninternational.org", "kweyenga@lninternational.org", "tmukabi@lninternational.org", "kenya@lninternational.org"]
 
     if not app_password:
         return True, f"Snapshot saved ({csv_path.name}). Missing app_password in [email]."

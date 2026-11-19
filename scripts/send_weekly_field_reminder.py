@@ -1,3 +1,5 @@
+import tomllib
+from pathlib import Path
 import os
 import sys
 import smtplib
@@ -207,6 +209,14 @@ def build_weekly_reminder_html(run_date: datetime) -> tuple[str, str, str]:
     return subject, html, plain_text
 
 
+def _load_streamlit_email_cfg() -> dict:
+    sec_path = Path(__file__).resolve().parent.parent / ".streamlit" / "secrets.toml"
+    if sec_path.exists():
+        with open(sec_path, "rb") as f:
+            return tomllib.load(f).get("email", {})
+    return {}
+
+
 def send_weekly_reminder(dry_run: bool = False) -> None:
     now = datetime.now()
     subject, html_body, text_body = build_weekly_reminder_html(now)
@@ -222,10 +232,11 @@ def send_weekly_reminder(dry_run: bool = False) -> None:
         print(f"Configured Recipients ({len(recipients)}): {recipients}")
         return
 
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD")
+    sec_email = _load_streamlit_email_cfg()
+    smtp_host = os.getenv("SMTP_HOST") or sec_email.get("smtp_host", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT") or sec_email.get("smtp_port", 587))
+    smtp_user = os.getenv("SMTP_USER") or sec_email.get("sender_email") or sec_email.get("sender")
+    smtp_pass = os.getenv("SMTP_PASS") or os.getenv("SMTP_PASSWORD") or sec_email.get("app_password")
 
     if not smtp_user or not smtp_pass:
         raise RuntimeError("Missing SMTP_USER / SMTP_PASS in .env — cannot dispatch Monday reminder email.")
