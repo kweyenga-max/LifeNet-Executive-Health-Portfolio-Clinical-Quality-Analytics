@@ -2753,7 +2753,14 @@ elif active_tab == "📑 Monthly DDIU Brief":
         m_uniq_all = int(df_mt_ddiu["beneficiary_uid"].nunique())
         m_med_u = int(df_mt_ddiu[df_mt_ddiu["Curriculum"].str.contains("Medical", case=False, na=False)]["beneficiary_uid"].nunique())
         m_mgt_u = int(df_mt_ddiu[df_mt_ddiu["Curriculum"].str.contains("Management", case=False, na=False)]["beneficiary_uid"].nunique())
-        m_onsite_s = int(df_mt_ddiu[df_mt_ddiu["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique())
+        _ddiu_onsite_df = df_mt_ddiu[(df_mt_ddiu["Delivery_Mode"] == "Physical / In-Person Onsite") & (df_mt_ddiu["Modality"] == "Onsite Mentorship")]
+        m_onsite_s = int(_ddiu_onsite_df["Session_UID"].nunique())
+        if not _ddiu_onsite_df.empty and "Mentor_Track" in _ddiu_onsite_df.columns:
+            _ddiu_tracks = _ddiu_onsite_df.groupby("Session_UID")["Mentor_Track"].nunique()
+            m_joint_s = int((_ddiu_tracks > 1).sum())
+            m_solo_s = int((_ddiu_tracks == 1).sum())
+        else:
+            m_joint_s, m_solo_s = 0, m_onsite_s
         m_virt_s = int(df_mt_ddiu[df_mt_ddiu["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique())
         m_fem_u = int(df_mt_ddiu[df_mt_ddiu["Gender"] == "Female"]["beneficiary_uid"].nunique())
         m_male_u = int(df_mt_ddiu[df_mt_ddiu["Gender"] == "Male"]["beneficiary_uid"].nunique())
@@ -2761,7 +2768,7 @@ elif active_tab == "📑 Monthly DDIU Brief":
         mc1, mc2, mc3, mc4 = st.columns(4)
         mc1.metric("Unique Beneficiaries (Deduplicated)", f"{m_uniq_all:,}", f"{len(df_mt_ddiu):,} total touches")
         mc2.metric("Medical vs. Management", f"{m_med_u:,} Med · {m_mgt_u:,} Mgt", "Deduplicated per stream")
-        mc3.metric("Sessions (Onsite vs. Virtual)", f"{m_onsite_s:,} Onsite · {m_virt_s:,} Virtual", f"{m_onsite_s + m_virt_s:,} total coaching sessions")
+        mc3.metric("Unique Visits & Virtual Sessions", f"{m_onsite_s:,} Onsite · {m_virt_s:,} Virtual", f"{m_joint_s:,} Joint Med+Mgt · {m_solo_s:,} Solo")
         mc4.metric("Gender Split (Female / Male)", f"{m_fem_u:,} F / {m_male_u:,} M", f"{(m_fem_u/max(m_fem_u+m_male_u,1)*100):.1f}% Female")
 
         cov_ddiu = build_facility_coverage_matrix(df_mt_ddiu)

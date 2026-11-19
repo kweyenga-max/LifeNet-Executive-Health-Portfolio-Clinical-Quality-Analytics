@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import re
 from datetime import date
@@ -179,6 +180,51 @@ def _build_beneficiary_uid(row: pd.Series) -> str:
     return f"NAME:{fn}_{ln}@{ou}"
 
 
+def _ensure_session_uids(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensures strict, non-inflated Session_UID and Mentor_Session_UID:
+      1. Physical Onsite Mentorship (Delivery_Mode == 'Physical / In-Person Onsite' & Modality == 'Onsite Mentorship'):
+         Deduplicated by (Facility + Date). Joint Med + Mgt visits on the same date count as 1 unique facility visit;
+         solo visits on separate dates count individually.
+      2. Centralized Training:
+         Deduplicated by (Date + Centralized Training) so multi-facility workshops count per workshop day rather than
+         inflating into separate facility visits.
+      3. Virtual Support:
+         Deduplicated by (Facility + Date + Modality + Delivery_Mode + Virtual_Platform + Trainer).
+    """
+    if df.empty:
+        return df
+    fac_norm = df["facility_name"].fillna("").astype(str).str.strip().str.lower()
+    dt_norm = df["event_date"].fillna("").astype(str).str.strip()
+    deliv = df["Delivery_Mode"].fillna("").astype(str).str.strip()
+    mod = df["Modality"].fillna("").astype(str).str.strip()
+    vp = df["Virtual_Platform"].fillna("").astype(str).str.strip()
+    tr = df["trainer_raw"].fillna("").astype(str).str.strip().str.lower()
+
+    is_phys_onsite = (deliv == "Physical / In-Person Onsite") & (mod == "Onsite Mentorship")
+    is_centralized = mod == "Centralized Training"
+
+    # Fold single-row stray centralized logging typos (e.g. 1-row date typo) into the main workshop date
+    _ct_dt_counts = dt_norm[is_centralized].value_counts()
+    _main_ct_dt = _ct_dt_counts.index[0] if not _ct_dt_counts.empty else ""
+    _small_ct_dts = set(_ct_dt_counts[_ct_dt_counts <= 2].index)
+    ct_dt_clean = np.where(dt_norm.isin(_small_ct_dts) & bool(_main_ct_dt), _main_ct_dt, dt_norm)
+
+    onsite_uid = fac_norm + "|" + dt_norm + "|ONSITE_VISIT"
+    central_uid = pd.Series(ct_dt_clean, index=df.index) + "|CENTRALIZED_WORKSHOP"
+    default_uid = fac_norm + "|" + dt_norm + "|" + mod + "|" + deliv + "|" + vp + "|" + tr
+
+    df["Session_UID"] = np.where(
+        is_phys_onsite,
+        onsite_uid,
+        np.where(is_centralized, central_uid, default_uid),
+    )
+    df["Mentor_Session_UID"] = (
+        fac_norm + "|" + dt_norm + "|" + mod + "|" + deliv + "|" + vp + "|" + tr
+    )
+    return df
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def sync_monitrac_mentees(force_live: bool = False) -> pd.DataFrame:
     required_cols = {"Curriculum", "Delivery_Mode", "Virtual_Platform", "Session_UID"}
@@ -186,7 +232,7 @@ def sync_monitrac_mentees(force_live: bool = False) -> pd.DataFrame:
         try:
             df_snap = pd.read_csv(MENTEE_SNAPSHOT_PATH, compression="gzip")
             if not df_snap.empty and required_cols.issubset(set(df_snap.columns)):
-                return df_snap
+                return _ensure_session_uids(df_snap)
         except Exception:
             pass
 
@@ -351,20 +397,8 @@ def sync_monitrac_mentees(force_live: bool = False) -> pd.DataFrame:
     df["Curriculum"] = [c[0] for c in curr_info]
     df["Modules_Pretty"] = [c[1] for c in curr_info]
 
-    # Distinct Coaching / Mentorship Session UID: collapses multiple mentees in the same facility/date/modality/channel/mentor visit into 1 coaching session
-    df["Session_UID"] = (
-        df["facility_name"].fillna("").astype(str).str.strip()
-        + "|"
-        + df["event_date"]
-        + "|"
-        + df["Modality"]
-        + "|"
-        + df["Delivery_Mode"]
-        + "|"
-        + df["Virtual_Platform"]
-        + "|"
-        + df["trainer_raw"].fillna("").astype(str).str.strip()
-    )
+    # Distinct Coaching / Mentorship Session UID: collapses joint Medical + Management onsite visits on the same facility & date into 1 unique facility visit
+    df = _ensure_session_uids(df)
 
     df = df.sort_values(["event_dt", "facility_name", "mentee_name"]).reset_index(drop=True)
     df = df.drop(columns=["event_dt"], errors="ignore")
@@ -411,7 +445,14 @@ def build_facility_coverage_matrix(df_mentees: pd.DataFrame) -> pd.DataFrame:
         uniq_total = int(sub["beneficiary_uid"].nunique()) if not sub.empty else 0
         med_uniq = int(sub[sub["Curriculum"].str.contains("Medical", case=False, na=False)]["beneficiary_uid"].nunique()) if not sub.empty else 0
         mgt_uniq = int(sub[sub["Curriculum"].str.contains("Management", case=False, na=False)]["beneficiary_uid"].nunique()) if not sub.empty else 0
-        onsite_sess = int(sub[sub["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique()) if not sub.empty else 0
+        onsite_sub = sub[(sub["Delivery_Mode"] == "Physical / In-Person Onsite") & (sub["Modality"] == "Onsite Mentorship")] if not sub.empty else sub
+        onsite_sess = int(onsite_sub["Session_UID"].nunique()) if not onsite_sub.empty else 0
+        if not onsite_sub.empty and "Mentor_Track" in onsite_sub.columns:
+            tracks_per_visit = onsite_sub.groupby("Session_UID")["Mentor_Track"].nunique()
+            joint_onsite = int((tracks_per_visit > 1).sum())
+            solo_onsite = int((tracks_per_visit == 1).sum())
+        else:
+            joint_onsite, solo_onsite = 0, onsite_sess
         virt_sess = int(sub[sub["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique()) if not sub.empty else 0
         tot_touches = int(len(sub))
         last_dt = str(sub["event_date"].max()) if not sub.empty else "—"
@@ -434,6 +475,8 @@ def build_facility_coverage_matrix(df_mentees: pd.DataFrame) -> pd.DataFrame:
                 "Medical_Mentees": med_uniq,
                 "Management_Mentees": mgt_uniq,
                 "Onsite_Sessions": onsite_sess,
+                "Joint_Onsite_Visits": joint_onsite,
+                "Solo_Onsite_Visits": solo_onsite,
                 "Virtual_Sessions": virt_sess,
                 "Total_Touches": tot_touches,
                 "Assigned_Mentors": mentors,
@@ -460,6 +503,8 @@ def build_facility_coverage_matrix(df_mentees: pd.DataFrame) -> pd.DataFrame:
                         "Medical_Mentees": med_uniq,
                         "Management_Mentees": mgt_uniq,
                         "Onsite_Sessions": onsite_sess,
+                        "Joint_Onsite_Visits": 0,
+                        "Solo_Onsite_Visits": onsite_sess,
                         "Virtual_Sessions": virt_sess,
                         "Total_Touches": int(len(sub)),
                         "Assigned_Mentors": mentors or "—",

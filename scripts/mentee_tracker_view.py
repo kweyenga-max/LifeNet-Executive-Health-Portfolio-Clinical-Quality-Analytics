@@ -274,8 +274,17 @@ def render_mentee_tracker_view():
     med_touches = float(person_df["Total_Encounters"].median())
     iqr_touches = float(person_df["Total_Encounters"].quantile(0.75) - person_df["Total_Encounters"].quantile(0.25))
 
+    onsite_df_win = df_win[(df_win["Delivery_Mode"] == "Physical / In-Person Onsite") & (df_win["Modality"] == "Onsite Mentorship")]
+    central_df_win = df_win[df_win["Modality"] == "Centralized Training"]
     total_sessions = int(df_win["Session_UID"].nunique())
-    onsite_sessions = int(df_win[df_win["Delivery_Mode"] == "Physical / In-Person Onsite"]["Session_UID"].nunique())
+    onsite_sessions = int(onsite_df_win["Session_UID"].nunique())
+    central_sessions = int(central_df_win["Session_UID"].nunique())
+    if not onsite_df_win.empty and "Mentor_Track" in onsite_df_win.columns:
+        _tracks_per_onsite = onsite_df_win.groupby("Session_UID")["Mentor_Track"].nunique()
+        joint_onsite_sessions = int((_tracks_per_onsite > 1).sum())
+        solo_onsite_sessions = int((_tracks_per_onsite == 1).sum())
+    else:
+        joint_onsite_sessions, solo_onsite_sessions = 0, onsite_sessions
     virtual_sessions = int(df_win[df_win["Delivery_Mode"] == "Virtual Mentorship / Support"]["Session_UID"].nunique())
     onsite_touches = int((df_win["Delivery_Mode"] == "Physical / In-Person Onsite").sum())
     virtual_touches = int((df_win["Delivery_Mode"] == "Virtual Mentorship / Support").sum())
@@ -310,9 +319,9 @@ def render_mentee_tracker_view():
     with k2:
         st.markdown(
             _kpi_card(
-                "Mentorship Sessions Held",
-                f"{total_sessions:,}",
-                f"<b>{onsite_sessions:,}</b> Physical Onsite ({onsite_touches:,} touches) · <b>{virtual_sessions:,}</b> Virtual ({virtual_touches:,} touches).",
+                "Unique Onsite Facility Visits",
+                f"{onsite_sessions:,} Visits",
+                f"<b>{joint_onsite_sessions:,}</b> Joint Med+Mgt · <b>{solo_onsite_sessions:,}</b> Solo (Facility+Date) · <b>{central_sessions:,}</b> Centralized · <b>{virtual_sessions:,}</b> Virtual.",
                 "#0284C7",
             ),
             unsafe_allow_html=True,
@@ -406,8 +415,8 @@ def render_mentee_tracker_view():
         onsite_share = (onsite_sessions / max(total_sessions, 1)) * 100.0
         avg_group = (onsite_touches / max(onsite_sessions, 1))
         _explain_box(
-            f"Physical in-person visits account for <b>{onsite_share:.1f}%</b> ({onsite_sessions:,} of {total_sessions:,}) of all coaching sessions, "
-            f"averaging <b>{avg_group:.1f} mentees per onsite visit</b>, while <b>{virtual_sessions:,} virtual sessions</b> extend rapid follow-up coaching to <b>{int(df_deliv.loc[1, 'Unique Mentees Reached']):,}</b> unique staff without travel overhead."
+            f"Field teams conducted <b>{onsite_sessions:,} unique onsite facility visits</b> (<b>{joint_onsite_sessions:,} joint Med+Mgt</b> &amp; <b>{solo_onsite_sessions:,} solo</b>, deduplicated by Facility + Date) plus <b>{central_sessions:,} centralized workshop days</b>, "
+            f"while <b>{virtual_sessions:,} virtual sessions</b> extended rapid follow-up coaching to <b>{int(df_deliv.loc[1, 'Unique Mentees Reached']):,}</b> unique staff."
         )
 
     with v2:
@@ -685,7 +694,8 @@ def render_mentee_tracker_view():
         for slug, info in MENTOR_REGISTRY.items():
             sub_t = df_win[df_win["trainer_raw"].str.contains(slug, case=False, na=False)]
             u_m = int(sub_t["beneficiary_uid"].nunique())
-            s_m = int(sub_t["Session_UID"].nunique())
+            sess_col = "Mentor_Session_UID" if "Mentor_Session_UID" in sub_t.columns else "Session_UID"
+            s_m = int(sub_t[sess_col].nunique())
             mentor_rows.append(
                 {
                     "Mentor": f"{info['name']} ({info['cohort']})",
@@ -805,7 +815,9 @@ def render_mentee_tracker_view():
                     "Unique_Mentees": "Unique Mentees",
                     "Medical_Mentees": "Med Mentees",
                     "Management_Mentees": "Mgt Mentees",
-                    "Onsite_Sessions": "Onsite Sessions",
+                    "Onsite_Sessions": "Unique Onsite Visits",
+                    "Joint_Onsite_Visits": "Joint Visits (Med+Mgt)",
+                    "Solo_Onsite_Visits": "Solo Visits",
                     "Virtual_Sessions": "Virtual Sessions",
                     "Total_Touches": "Total Touches",
                     "Assigned_Mentors": "Mentor(s)",
